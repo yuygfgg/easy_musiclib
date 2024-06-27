@@ -10,3 +10,5 @@ A ChatGPT written music library, including server and cli client. Supports muiti
 - mobile app : ~ 2025
 
 The project will continue until I find another music library that handles muitiple artist  and muiti-disc albums correctly
+
+Documents are currently only in Chinese. They are all ChatGPT generated, so you can generate your own in other languages.
