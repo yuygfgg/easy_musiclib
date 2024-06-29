@@ -405,12 +405,25 @@
         await toggleSongLike(currentSong.uuid);
     }
 
+    let isDebounced = false; // 增加一个防抖动标志
+
     function playNextSong() {
+        if (isDebounced) return; // 如果已经在防抖动期间，则直接返回
+
+        isDebounced = true; // 设置防抖动标志
+        setTimeout(() => { isDebounced = false; }, 1000); // 1秒后解除防抖动
+
+        console.log("next song!");
         currentIndex = (currentIndex + 1) % songs.length;
         fetchAndPlaySong(currentIndex);
     }
 
     function playPreviousSong() {
+        if (isDebounced) return; // 如果已经在防抖动期间，则直接返回
+
+        isDebounced = true; // 设置防抖动标志
+        setTimeout(() => { isDebounced = false; }, 1000); // 1秒后解除防抖动
+
         currentIndex = (currentIndex - 1 + songs.length) % songs.length;
         fetchAndPlaySong(currentIndex);
     }

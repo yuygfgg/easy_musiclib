@@ -263,9 +263,15 @@
         return null;
     }
 
-async function playSong(song) {
+    async function playSong(song) {
     try {
         console.log('Playing song:', song);
+
+        // 暂停并重置当前音频
+        audioPlayer.pause();
+        audioPlayer.src = ''; // 清空当前 src
+        audioPlayer.load(); // 重置音频元素
+
         const response = await fetch(song.url);
         if (response.ok) {
             const blob = await response.blob();
@@ -406,6 +412,10 @@ async function playSong(song) {
             console.error('Error:', error);
         }
     }
+    function playNextSong() {
+        const iframe = document.getElementById('content-frame').contentWindow;
+        iframe.postMessage({ action: 'next' }, '*');
+    }
 
     document.getElementById('prev-btn').addEventListener('click', () => {
         const iframe = document.getElementById('content-frame').contentWindow;
@@ -415,6 +425,7 @@ async function playSong(song) {
     document.getElementById('play-pause-btn').addEventListener('click', togglePlayPause);
     document.getElementById('next-btn').addEventListener('click', () => {
         const iframe = document.getElementById('content-frame').contentWindow;
+        console.log("next song message sent!")
         iframe.postMessage({ action: 'next' }, '*');
     });
     document.getElementById('repeat-btn').addEventListener('click', toggleRepeat);

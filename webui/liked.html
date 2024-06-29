@@ -91,6 +91,9 @@
 
     <script>
         const apiBaseUrl = 'http://127.0.0.1:5000';
+        let currentIndex = 0;
+        let likedSongs = [];
+        let currentSong = null;
 
         async function fetchLikedData() {
             try {
@@ -100,7 +103,7 @@
                     fetch(`${apiBaseUrl}/show_liked_albums`)
                 ]);
 
-                const likedSongs = await likedSongsResponse.json();
+                likedSongs = await likedSongsResponse.json();
                 const likedArtists = await likedArtistsResponse.json();
                 const likedAlbums = await likedAlbumsResponse.json();
 
@@ -134,7 +137,7 @@
                 songItem.className = 'song-item';
                 songItem.id = `song-${song.uuid}`;
                 songItem.onclick = () => {
-                    fetchAndPlaySong(song.uuid);
+                    fetchAndPlaySong(index);
                 };
 
                 const songInfo = document.createElement('div');
@@ -348,7 +351,9 @@
             }
         }
 
-        async function fetchAndPlaySong(uuid) {
+        async function fetchAndPlaySong(index) {
+            currentIndex = index;
+            const uuid = likedSongs[index].uuid;
             try {
                 console.log('Fetching song details for uuid:', uuid);
                 const response = await fetch(`${apiBaseUrl}/show_song/${uuid}`);
@@ -399,6 +404,51 @@
             } catch (error) {
                 console.error('Error:', error);
             }
+        }
+
+        let isDebounced = false; // 增加一个防抖动标志
+
+        function playNextSong() {
+            if (isDebounced) return; // 如果已经在防抖动期间，则直接返回
+
+            isDebounced = true; // 设置防抖动标志
+            setTimeout(() => { isDebounced = false; }, 1000); // 1秒后解除防抖动
+
+            console.log("next song!");
+            currentIndex = (currentIndex + 1) % likedSongs.length;
+            fetchAndPlaySong(currentIndex);
+        }
+
+        function playPreviousSong() {
+            if (isDebounced) return; // 如果已经在防抖动期间，则直接返回
+
+            isDebounced = true; // 设置防抖动标志
+            setTimeout(() => { isDebounced = false; }, 1000); // 1秒后解除防抖动
+
+            currentIndex = (currentIndex - 1 + likedSongs.length) % likedSongs.length;
+            fetchAndPlaySong(currentIndex);
+        }
+
+        // 处理来自父窗口的消息
+        window.addEventListener('message', (event) => {
+            if (event.data.action === 'previous') {
+                playPreviousSong();
+            } else if (event.data.action === 'next') {
+                playNextSong();
+            } else if (event.data.action === 'toggleLike') {
+                toggleLike();
+            } else if (event.data.action === 'updateSongLike') {
+                updateSongListIcon(event.data.uuid, event.data.isLiked);
+            }
+        });
+
+        async function toggleLike() {
+            if (!currentSong) {
+                console.error('Error: No song is currently being played.');
+                return;
+            }
+
+            await toggleSongLike(currentSong.uuid);
         }
 
         fetchLikedData();
