@@ -1,6 +1,6 @@
 ## EASY MUSIC LIBRARY
 
-A music library server, including server and cli client. Supports muitiple artists per track and album.
+A music library server, including server, cli client, and webui. Supports muitiple artists per track and album.
 
 ### Schedual
 
