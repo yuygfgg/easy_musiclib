@@ -2,6 +2,8 @@ from mutagen.easyid3 import EasyID3
 from mutagen.flac import FLAC
 import os
 import uuid
+from musiclib_display import MusicLibraryDisplay
+import re
 
 class Artist:
     def __init__(self, name):
@@ -26,6 +28,7 @@ class Album:
         self.songs = []
         self.is_liked = False
         self.album_art_path = ""
+        self.year = None  # New attribute for year
 
     def like(self):
         self.is_liked = True
@@ -35,8 +38,16 @@ class Album:
         self.is_liked = False
         print(f"Album {self.name} unliked.")
 
+    def update_year(self):
+        # Set the album's year to any song's year if not already set
+        if not self.year and self.songs:
+            for song in self.songs:
+                if song.year:
+                    self.year = song.year
+                    break
+
 class Song:
-    def __init__(self, name, album, artists, file_path, track_number=1, disc_number=1):
+    def __init__(self, name, album, artists, file_path, track_number=1, disc_number=1, year=None):
         self.name = name
         self.uuid = str(uuid.uuid4())
         self.album = {'name': album.name, 'uuid': album.uuid}
@@ -46,6 +57,7 @@ class Song:
         self.disc_number = disc_number
         self.is_liked = False
         self.song_art_path = self.find_art_path(file_path)
+        self.year = year  # New attribute for year
 
     def find_art_path(self, file_path):
         folder_path = os.path.dirname(file_path)
@@ -68,6 +80,7 @@ class MusicLibrary:
         self.artists = {}
         self.albums = {}
         self.songs = {}
+        self.display = MusicLibraryDisplay(self)
 
     def add_song(self, song):
         self.songs[song.uuid] = song
@@ -105,52 +118,63 @@ class MusicLibrary:
     
     def goto_song(self, song_uuid):
         return self.songs.get(song_uuid, None)
-
+    
     def scan(self, directory):
+        scanned_count = 0
         for root, dirs, files in os.walk(directory):
             for file in files:
                 if file.endswith(".mp3") or file.endswith(".flac"):
-                    file_path = os.path.join(root, file)
-                    id3_tags = self.extract_id3_tags(file_path)
-                    song_name = id3_tags['title']
-                    album_name = id3_tags['album']
-                    artist_names = id3_tags['artists']
-                    album_artist_names = id3_tags.get('album_artists', artist_names)
-                    track_number = id3_tags['track_number']
-                    disc_number = id3_tags['disc_number']
+                    scanned_count += 1
+                    if scanned_count % 250 == 0:
+                        print(f"Scanned {scanned_count} files.")
+                    try:
+                        file_path = os.path.join(root, file)
+                        id3_tags = self.extract_id3_tags(file_path)
+                        song_name = id3_tags['title']
+                        album_name = id3_tags['album']
+                        artist_names = id3_tags['artists']
+                        album_artist_names = id3_tags.get('album_artists', artist_names)
+                        track_number = id3_tags['track_number']
+                        disc_number = id3_tags['disc_number']
+                        year = id3_tags['year']
 
-                    album = self.find_album_by_name(album_name)
-                    if not album:
-                        album = Album(album_name)
-                        self.add_album(album)
+                        album = self.find_album_by_name(album_name)
+                        if not album:
+                            album = Album(album_name)
+                            self.add_album(album)
 
-                    for artist_name in album_artist_names:
-                        artist = self.find_artist_by_name(artist_name)
-                        if not artist:
-                            artist = Artist(artist_name)
-                            self.add_artist(artist)
-                        album.album_artists.add(artist)
+                        for artist_name in album_artist_names:
+                            artist = self.find_artist_by_name(artist_name)
+                            if not artist:
+                                artist = Artist(artist_name)
+                                self.add_artist(artist)
+                            album.album_artists.add(artist)
 
-                    song_artists = []
-                    for artist_name in artist_names:
-                        artist = self.find_artist_by_name(artist_name)
-                        if not artist:
-                            artist = Artist(artist_name)
-                            self.add_artist(artist)
-                        song_artists.append(artist)
+                        song_artists = []
+                        for artist_name in artist_names:
+                            artist = self.find_artist_by_name(artist_name)
+                            if not artist:
+                                artist = Artist(artist_name)
+                                self.add_artist(artist)
+                            song_artists.append(artist)
 
-                    song = Song(song_name, album, song_artists, file_path, track_number, disc_number)
-                    self.add_song(song)
-                    album.songs.append(song)
+                        song = Song(song_name, album, song_artists, file_path, track_number, disc_number, year)
+                        self.add_song(song)
+                        album.songs.append(song)
 
-                    # Set album art path if not already set
-                    if not album.album_art_path:
-                        album.album_art_path = song.song_art_path
+                        # Set album art path if not already set
+                        if not album.album_art_path:
+                            album.album_art_path = song.song_art_path
 
-                    # Set artist art path if not already set
-                    for artist in album.album_artists:
-                        if not artist.artist_art_path:
-                            artist.artist_art_path = album.album_art_path
+                        album.update_year()  # Update album year based on song year
+
+                        # Set artist art path if not already set
+                        for artist in album.album_artists:
+                            if not artist.artist_art_path:
+                                artist.artist_art_path = album.album_art_path
+                    except Exception as e:
+                        print(f"Error processing file {file_path}: {e}")
+                        continue
 
     def extract_id3_tags(self, file_path):
         file_extension = os.path.splitext(file_path)[1].lower()
@@ -166,7 +190,8 @@ class MusicLibrary:
                 'album': 'Unknown Album',
                 'artists': ['Unknown Artist'],
                 'track_number': 1,
-                'disc_number': 1
+                'disc_number': 1,
+                'year': None
             }
 
     def extract_mp3_tags(self, file_path):
@@ -179,7 +204,8 @@ class MusicLibrary:
                 'album': 'Unknown Album',
                 'artists': ['Unknown Artist'],
                 'track_number': 1,
-                'disc_number': 1
+                'disc_number': 1,
+                'year': None
             }
 
         title = audio.get('title', ['Unknown Title'])[0]
@@ -191,7 +217,10 @@ class MusicLibrary:
         track_number = int(audio.get('tracknumber', ['1'])[0].split('/')[0])
         disc_number = int(audio.get('discnumber', ['1'])[0].split('/')[0])
 
-        return self.parse_artists(title, album, artists, track_number, disc_number)
+        year = audio.get('date', [None])[0] or audio.get('year', [None])[0]
+        year = self.extract_year(year)
+
+        return self.parse_artists(title, album, artists, track_number, disc_number, year=year)
 
     def extract_flac_tags(self, file_path):
         try:
@@ -203,7 +232,8 @@ class MusicLibrary:
                 'album': 'Unknown Album',
                 'artists': ['Unknown Artist'],
                 'track_number': 1,
-                'disc_number': 1
+                'disc_number': 1,
+                'year': None
             }
 
         title = audio.get('title', ['Unknown Title'])[0]
@@ -212,17 +242,22 @@ class MusicLibrary:
         if isinstance(artists, str):
             artists = [artists]
 
-        album_artists = audio.get('albumartist', artists)
+        album_artists = audio.get('albumartist')
+        if not album_artists:
+            album_artists = audio.get('album artist', artists)
         if isinstance(album_artists, str):
             album_artists = [album_artists]  # Ensure it's always a list
 
         track_number = int(audio.get('tracknumber', ['1'])[0].split('/')[0])
         disc_number = int(audio.get('discnumber', ['1'])[0].split('/')[0])
 
-        return self.parse_artists(title, album, artists, track_number, disc_number, album_artists)
+        year = audio.get('date', [None])[0] or audio.get('year', [None])[0]
+        year = self.extract_year(year)
 
-    def parse_artists(self, title, album, artists, track_number=1, disc_number=1, album_artists=None):
-        delimiters = ['/', '&', ' x ', ';', '；']
+        return self.parse_artists(title, album, artists, track_number, disc_number, album_artists, year)
+
+    def parse_artists(self, title, album, artists, track_number=1, disc_number=1, album_artists=None, year=None):
+        delimiters = ['/', '&', ' x ', ';', '；', ',', '，', ' × ']
         parsed_artists = []
         for artist in artists:
             for delimiter in delimiters:
@@ -249,8 +284,16 @@ class MusicLibrary:
             'artists': parsed_artists,
             'album_artists': parsed_album_artists,
             'track_number': track_number,
-            'disc_number': disc_number
+            'disc_number': disc_number,
+            'year': year
         }
+
+    def extract_year(self, date_string):
+        if date_string:
+            match = re.search(r'\b(\d{4})\b', date_string)
+            if match:
+                return int(match.group(1))
+        return None
 
     def search_song(self, name):
         return self.find_song_by_name(name)
@@ -260,67 +303,6 @@ class MusicLibrary:
 
     def search_artist(self, name):
         return self.find_artist_by_name(name)
-
-    def show_songinfo(self, song):
-        print("------------start song information------------")
-        print(f"Song: {song.name}")
-        print(f"UUID: {song.uuid}")
-        print(f"Album: {song.album['name']} (UUID: {song.album['uuid']})")
-        artist_info = ', '.join([f"{artist['name']} (UUID: {artist['uuid']})" for artist in song.artists])
-        print(f"Artists: {artist_info}")
-        print(f"File Path: {song.file_path}")
-        print(f"Track Number: {song.track_number}")
-        print(f"Disc Number: {song.disc_number}")
-        print(f"Song Art Path: {song.song_art_path}")
-        print(f"Isliked: {song.is_liked}")
-        print("------------end song information------------")
-
-    def show_albuminfo(self, album):
-        print("------------start album information------------")
-        print(f"Album: {album.name}")
-        print(f"UUID: {album.uuid}")
-        for artist in album.album_artists:
-            print(f"Album artist: {artist.name} ({artist.uuid})")
-        print("Songs:")
-        for song in album.songs:
-            print(f"  - {song.name} (UUID: {song.uuid}, Track: {song.track_number}, Disc: {song.disc_number})")
-        print(f"Album Art Path: {album.album_art_path}")
-        print(f"Isliked: {album.is_liked}")
-        print("------------end album information------------")
-
-    def show_artistinfo(self, artist):
-        print("------------start artist information------------")
-        if isinstance(artist, (set, list)):
-            for single_artist in artist:
-                self._show_single_artistinfo(single_artist)
-        else:
-            self._show_single_artistinfo(artist)
-        print("------------end artist information------------")
-
-    def _show_single_artistinfo(self, artist):
-        print(f"Artist: {artist.name}")
-        print(f"UUID: {artist.uuid}")
-        print("Albums:")
-        for album in self.albums.values():
-            if artist in album.album_artists:
-                print(f"  - {album.name} (UUID: {album.uuid})")
-        print("Songs:")
-        for song in self.songs.values():
-            if artist.uuid in [a['uuid'] for a in song.artists]:
-                print(f"  - {song.name} (UUID: {song.uuid}, Track: {song.track_number}, Disc: {song.disc_number})")
-        print(f"Artist Art Path: {artist.artist_art_path}")
-        print(f"Isliked: {artist.is_liked}")
-
-    def show_library(self):
-        print("Artists:")
-        for artist in self.artists.values():
-            self.show_artistinfo(artist)
-        print("\nAlbums:")
-        for album in self.albums.values():
-            self.show_albuminfo(album)
-        print("\nSongs:")
-        for song in self.songs.values():
-            self.show_songinfo(song)
 
     def like_song(self, uuid):
         song = self.songs.get(uuid)
@@ -364,21 +346,6 @@ class MusicLibrary:
         else:
             print(f"Album {uuid} not found.")
     
-    def show_liked_songs(self):
-        liked_songs = [song for song in self.songs.values() if song.is_liked]
-        for song in liked_songs:
-            print(f"{song.name} (UUID: {song.uuid}) Disc_number: {song.disc_number}")
-
-    def show_liked_artists(self):
-        liked_artists = [artist for artist in self.artists.values() if artist.is_liked]
-        for artist in liked_artists:
-            print(f"{artist.name} (UUID: {artist.uuid})")
-
-    def show_liked_albums(self):
-        liked_albums = [album for album in self.albums.values() if album.is_liked]
-        for album in liked_albums:
-            print(f"{album.name} (UUID: {album.uuid})")
-    
     def search(self, query):
         import re
         pattern = re.compile(re.escape(query), re.IGNORECASE)
@@ -398,4 +365,4 @@ if __name__ == "__main__":
     library.scan('/Users/a1/other')
 
     # 展示整个库
-    library.show_library()
+    library.display.show_library()

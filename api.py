@@ -4,8 +4,11 @@ import os
 import atexit
 import pickle
 import signal
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
+
 library = MusicLibrary()
 data_file = 'library_data.pkl'
 
@@ -53,22 +56,26 @@ def add_song():
     file_path = request.args.get('file_path')
     track_number = int(request.args.get('track_number', 1))
     disc_number = int(request.args.get('disc_number', 1))
-    
+    year = request.args.get('year')
+
     album = library.goto_album(album_uuid)
     artists = [library.goto_artist(uuid) for uuid in artist_uuids]
     
-    song = Song(name, album, artists, file_path, track_number, disc_number)
+    song = Song(name, album, artists, file_path, track_number, disc_number, year)
     library.add_song(song)
+    album.update_year()  # Update album year based on song year
     save_library()  # Save after adding
-    return jsonify({'message': 'Song added'}), 201
+    return jsonify({'message': 'Song added', 'uuid': song.uuid, 'year': song.year}), 201
 
 @app.route('/add_album', methods=['GET'])
 def add_album():
     name = request.args.get('name')
+    year = request.args.get('year')
     album = Album(name)
+    album.year = year  # Set the year for the album
     library.add_album(album)
     save_library()  # Save after adding
-    return jsonify({'message': 'Album added', 'uuid': album.uuid}), 201
+    return jsonify({'message': 'Album added', 'uuid': album.uuid, 'year': album.year}), 201
 
 @app.route('/add_artist', methods=['GET'])
 def add_artist():
@@ -157,17 +164,17 @@ def show_library():
 
 @app.route('/show_liked_songs', methods=['GET'])
 def show_liked_songs():
-    liked_songs = [{'name': song.name, 'uuid': song.uuid} for song in library.songs.values() if song.is_liked]
+    liked_songs = [{'name': song.name, 'uuid': song.uuid, 'artists': song.artists, 'album': song.album, 'song_art_path': song.song_art_path, 'is_liked': song.is_liked, 'file_path': song.file_path} for song in library.songs.values() if song.is_liked]
     return jsonify(liked_songs), 200
 
 @app.route('/show_liked_artists', methods=['GET'])
 def show_liked_artists():
-    liked_artists = [{'name': artist.name, 'uuid': artist.uuid} for artist in library.artists.values() if artist.is_liked]
+    liked_artists = [{'name': artist.name, 'uuid': artist.uuid, 'artist_art_path': artist.artist_art_path, 'is_liked': artist.is_liked} for artist in library.artists.values() if artist.is_liked]
     return jsonify(liked_artists), 200
 
 @app.route('/show_liked_albums', methods=['GET'])
 def show_liked_albums():
-    liked_albums = [{'name': album.name, 'uuid': album.uuid} for album in library.albums.values() if album.is_liked]
+    liked_albums = [{'name': album.name, 'uuid': album.uuid, 'year': album.year, 'album_art_path': album.album_art_path, 'is_liked': album.is_liked} for album in library.albums.values() if album.is_liked]
     return jsonify(liked_albums), 200
 
 @app.route('/show_song/<uuid>', methods=['GET'])
@@ -183,7 +190,8 @@ def show_song(uuid):
             'track_number': song.track_number,
             'disc_number': song.disc_number,
             'is_liked': song.is_liked,
-            'song_art_path': song.song_art_path
+            'song_art_path': song.song_art_path,
+            'year': song.year  # Include the year in the response
         }), 200
     return jsonify({'message': 'Song not found'}), 404
 
@@ -195,9 +203,10 @@ def show_album(uuid):
             'name': album.name,
             'uuid': album.uuid,
             'album_artists': [{'name': artist.name, 'uuid': artist.uuid} for artist in album.album_artists],
-            'songs': [{'name': song.name, 'uuid': song.uuid, 'track_number': song.track_number, 'disc_number': song.disc_number} for song in album.songs],
+            'songs': [{'name': song.name, 'uuid': song.uuid, 'artists': song.artists, 'album': song.album, 'song_art_path': song.song_art_path, 'is_liked': song.is_liked, 'track_number': song.track_number, 'disc_number': song.disc_number} for song in album.songs],
             'is_liked': album.is_liked,
-            'album_art_path': album.album_art_path
+            'album_art_path': album.album_art_path,
+            'year': album.year  # Include the year in the response
         }), 200
     return jsonify({'message': 'Album not found'}), 404
 
@@ -205,8 +214,8 @@ def show_album(uuid):
 def show_artist(uuid):
     artist = library.goto_artist(uuid)
     if artist:
-        albums = [{'name': album.name, 'uuid': album.uuid} for album in library.albums.values() if artist in album.album_artists]
-        songs = [{'name': song.name, 'uuid': song.uuid, 'track_number': song.track_number, 'disc_number': song.disc_number} for song in library.songs.values() if artist.uuid in [a['uuid'] for a in song.artists]]
+        albums = [{'name': album.name, 'uuid': album.uuid, 'year': album.year, 'album_art_path': album.album_art_path, 'is_liked': album.is_liked} for album in library.albums.values() if artist in album.album_artists]
+        songs = [{'name': song.name, 'uuid': song.uuid, 'artists': song.artists, 'album': song.album, 'song_art_path': song.song_art_path, 'is_liked': song.is_liked, 'track_number': song.track_number, 'disc_number': song.disc_number} for song in library.songs.values() if artist.uuid in [a['uuid'] for a in song.artists]]
         return jsonify({
             'name': artist.name,
             'uuid': artist.uuid,
@@ -221,9 +230,9 @@ def show_artist(uuid):
 def search(query):
     results = library.search(query)
     return jsonify({
-        'songs': [{'name': song.name, 'uuid': song.uuid} for song in results['songs']],
-        'albums': [{'name': album.name, 'uuid': album.uuid} for album in results['albums']],
-        'artists': [{'name': artist.name, 'uuid': artist.uuid} for artist in results['artists']]
+        'songs': [{'name': song.name, 'uuid': song.uuid, 'artists': song.artists, 'album': song.album, 'song_art_path': song.song_art_path, 'is_liked': song.is_liked, 'file_path': song.file_path} for song in results['songs']],
+        'albums': [{'name': album.name, 'uuid': album.uuid, 'year': album.year, 'album_art_path': album.album_art_path, 'is_liked': album.is_liked} for album in results['albums']],
+        'artists': [{'name': artist.name, 'uuid': artist.uuid, 'artist_art_path': artist.artist_art_path, 'is_liked': artist.is_liked} for artist in results['artists']]
     }), 200
 
 @app.route('/getfile', methods=['GET'])

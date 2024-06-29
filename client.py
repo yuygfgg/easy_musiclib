@@ -10,20 +10,21 @@ class MusicLibraryClient:
         self.base_url = base_url
         self.headers = {"Content-Type": "application/json"}
 
-    def add_song(self, name, album_uuid, artist_uuids, file_path, track_number=1, disc_number=1):
+    def add_song(self, name, album_uuid, artist_uuids, file_path, track_number=1, disc_number=1, year=None):
         params = {
             "name": name,
             "album_uuid": album_uuid,
             "artist_uuids": artist_uuids,
             "file_path": file_path,
             "track_number": track_number,
-            "disc_number": disc_number
+            "disc_number": disc_number,
+            "year": year  # 添加 year 参数
         }
         response = requests.get(f"{self.base_url}/add_song", params=params, headers=self.headers)
         return response.json()
 
-    def add_album(self, name):
-        params = {"name": name}
+    def add_album(self, name, year=None):
+        params = {"name": name, "year": year}  # 添加 year 参数
         response = requests.get(f"{self.base_url}/add_album", params=params, headers=self.headers)
         return response.json()
 
@@ -132,6 +133,7 @@ class MusicLibraryConsole(Cmd):
         print(f"Disc Number: {song_info.get('disc_number')}")
         print(f"Song Art Path: {song_info.get('song_art_path')}")
         print(f"Is Liked: {song_info.get('is_liked')}")
+        print(f"Year: {song_info.get('year')}")  # 添加 year 信息
 
     def print_album_details(self, album_info):
         print(f"Album: {album_info.get('name')}")
@@ -146,6 +148,7 @@ class MusicLibraryConsole(Cmd):
             print(f"  Disc Number: {song.get('disc_number')}")
         print(f"Album Art Path: {album_info.get('album_art_path')}")
         print(f"Is Liked: {album_info.get('is_liked')}")
+        print(f"Year: {album_info.get('year')}")  # 添加 year 信息
 
     def print_artist_details(self, artist_info):
         print(f"Artist: {artist_info.get('name')}")
@@ -305,7 +308,9 @@ class MusicLibraryConsole(Cmd):
         if not args:
             print("Usage: search <query>")
             return
-        result = self.client.search(args)
+        query = " ".join(args.split())  # 支持包含空格的搜索词
+        query = query.replace("/", "%2F")  # 支持包含 / 的搜索词
+        result = self.client.search(query)
         self.print_search_results(result)
 
     def do_like_song(self, args):
@@ -354,6 +359,14 @@ class MusicLibraryConsole(Cmd):
             print("Usage: unlike_artist <uuid>")
             return
         result = self.client.unlike_artist(args)
+        self.pretty_print_json(result)
+
+    def do_scan_directory(self, args):
+        """Scan a directory for music files: scan_directory <directory>"""
+        if not args:
+            print("Usage: scan_directory <directory>")
+            return
+        result = self.client.scan(args)
         self.pretty_print_json(result)
 
     def do_exit(self, args):

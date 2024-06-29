@@ -1,6 +1,6 @@
 ## EASY MUSIC LIBRARY
 
-A ChatGPT written music library, including server and cli client. Supports muitiple artists per track and album.
+A music library server, including server and cli client. Supports muitiple artists per track and album.
 
 ### Schedual
 
@@ -9,7 +9,7 @@ A ChatGPT written music library, including server and cli client. Supports muiti
 - webui : ~ 2024.10.07
 - mobile app : ~ 2025
 
-The project will continue until I find another music library that handles muitiple artist  and muiti-disc albums correctly
+The project will continue unless I find another music library server that handles muitiple artist  and muiti-disc albums correctly.
 
 Documents are currently only in Chinese. They are all ChatGPT generated, so you can generate your own in other languages.
 
