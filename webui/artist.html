@@ -101,9 +101,10 @@
     </div>
 
     <script>
-        const apiBaseUrl = 'http://127.0.0.1:5000';
+        let apiBaseUrl = 'http://127.0.0.1:5000';
         const urlParams = new URLSearchParams(window.location.search);
         const artistUUID = urlParams.get('uuid'); // 从URL参数获取UUID
+        apiBaseUrl = urlParams.get('apibaseUrl');
 
         if (!artistUUID) {
             document.body.innerHTML = '<h1>缺少艺术家UUID参数</h1>';

@@ -96,10 +96,11 @@
     </div>
 
     <script>
-        const apiBaseUrl = 'http://127.0.0.1:5000';
+        let apiBaseUrl = 'http://127.0.0.1:5000';
 
         // 从 URL 获取查询参数并执行搜索
         const urlParams = new URLSearchParams(window.location.search);
+        apiBaseUrl = urlParams.get('apibaseUrl')
         const query = urlParams.get('query');
         if (query) {
             performSearch(query);

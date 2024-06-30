@@ -148,12 +148,8 @@
     <div class="navbar">
         <div class="input-container">
             <div>
-                <input type="text" id="album-uuid" placeholder="输入专辑UUID">
-                <button onclick="navigateToAlbum()">查看专辑</button>
-            </div>
-            <div>
-                <input type="text" id="artist-uuid" placeholder="输入艺术家UUID">
-                <button onclick="navigateToArtist()">查看艺术家</button>
+                <input type="text" id="apiBaseUrl" placeholder="输入api服务地址">
+                <button onclick="setapiBaseUrl()">设定</button>
             </div>
         </div>
         <div class="search-container">
@@ -196,15 +192,23 @@
 <audio id="audio-player" src=""></audio>
 
 <script>
-    const apiBaseUrl = 'http://127.0.0.1:5000';
+    let apiBaseUrl = 'http://127.0.0.1:5000';
     let isPlaying = false;
     let isRepeating = false;
     let currentSongUUID = null;
 
     function navigateTo(url) {
         const iframe = document.getElementById('content-frame');
-        iframe.src = url;
+        const newUrl = `${url}&apibaseUrl=${encodeURIComponent(apiBaseUrl)}`;
+        iframe.src = newUrl;
     }
+
+    function navigateToForLiked(url) {
+        const iframe = document.getElementById('content-frame');
+        const newUrl = `${url}?apibaseUrl=${encodeURIComponent(apiBaseUrl)}`;
+        iframe.src = newUrl;
+    }
+
     function handleSearchKey(event) {
         if (event.key === 'Enter') {
             navigateToSearch();
@@ -221,29 +225,19 @@
         }
     }
 
-    function navigateToAlbum() {
-        const albumUUID = document.getElementById('album-uuid').value;
-        if (albumUUID) {
-            console.log(`Navigating to album.html?uuid=${albumUUID}`); // Log URL for debugging
-            navigateTo(`album.html?uuid=${albumUUID}`);
+    function setapiBaseUrl() {
+        const query = document.getElementById('apiBaseUrl').value;
+        if (query) {
+            console.log(`set apibaseUrl to ${encodeURIComponent(query)}`); // Log URL for debugging
+            apiBaseUrl=query;
         } else {
-            alert('请输入专辑UUID');
-        }
-    }
-
-    function navigateToArtist() {
-        const artistUUID = document.getElementById('artist-uuid').value;
-        if (artistUUID) {
-            console.log(`Navigating to artist.html?uuid=${artistUUID}`); // Log URL for debugging
-            navigateTo(`artist.html?uuid=${artistUUID}`);
-        } else {
-            alert('请输入艺术家UUID');
+            alert('请输入apibaseurl');
         }
     }
 
     function navigateToLiked() {
         console.log('Navigating to liked.html'); // Log navigation for debugging
-        navigateTo('liked.html');
+        navigateToForLiked('liked.html');
     }
 
     // 播放器控制逻辑

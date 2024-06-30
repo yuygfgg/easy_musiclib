@@ -86,9 +86,10 @@
 </div>
 
 <script>
-    const apiBaseUrl = 'http://127.0.0.1:5000';
+    let apiBaseUrl = 'http://127.0.0.1:5000';
     const urlParams = new URLSearchParams(window.location.search);
     const albumUUID = urlParams.get('uuid'); // 从URL参数获取UUID
+    apiBaseUrl = urlParams.get('apibaseUrl');
 
     if (!albumUUID) {
         document.body.innerHTML = '<h1>缺少专辑UUID参数</h1>';
@@ -147,7 +148,7 @@
         albumArtists.innerHTML = '';
         album.album_artists.forEach(artist => {
             const artistLink = document.createElement('a');
-            artistLink.href = `artist.html?uuid=${artist.uuid}`;
+            artistLink.href = `artist.html?uuid=${artist.uuid}&apibaseUrl=${apiBaseUrl}`;
             artistLink.textContent = artist.name;
             artistLink.style.color = '#007bff';
             artistLink.style.marginRight = '10px';

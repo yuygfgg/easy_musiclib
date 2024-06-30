@@ -90,7 +90,9 @@
     </div>
 
     <script>
-        const apiBaseUrl = 'http://127.0.0.1:5000';
+        let apiBaseUrl = 'http://127.0.0.1:5000';
+        const urlParams = new URLSearchParams(window.location.search);
+        apiBaseUrl = urlParams.get('apibaseUrl');
         let currentIndex = 0;
         let likedSongs = [];
         let currentSong = null;
