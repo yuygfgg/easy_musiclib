@@ -16,12 +16,11 @@ Webui is currently in **Chinese** only.
 #### Server Setup
 1. Clone the repository
 2. Install all necessary python packages ``` pip install -r requirements.txt ```
-3. install http-server ``` npm install -g http-server ```
-4. install ``` mpv ```
-5. Run api.py ```python api.py ```
-6. modify ``` base_url ``` in ``` client.py ```
-7. run cli client ```python client.py```
-8. run http-server ``` http-server ```
+3. install ``` mpv ```
+4. Run api.py ```python api.py ```
+5. modify ``` base_url ``` in ``` client.py ```
+6. run cli client ```python client.py```
+7. run webui server in ``` webui ``` folder:  ``` node server.js ```
 
 #### Scan Directory
 1. run cli client ```python client.py```
