@@ -2,6 +2,13 @@
 
 A music library server, including server, cli client, and webui. Supports muitiple artists per track and album.
 
+### Screen Shots
+
+
+<img width="1863" alt="截屏2024-07-01 21 07 41" src="https://github.com/yuygfgg/easy_musiclib/assets/140488233/77a8b735-4dba-45d3-83a3-99a6310f1cb2">
+<img width="1865" alt="截屏2024-07-01 21 09 07" src="https://github.com/yuygfgg/easy_musiclib/assets/140488233/934f6f9f-5e67-41f0-85bb-b0d2caf4191f">
+<img width="1860" alt="截屏2024-07-01 21 10 09" src="https://github.com/yuygfgg/easy_musiclib/assets/140488233/7350dadd-312d-432d-8bc6-fa5f98749311">
+
 ### Schedual
 
 - add lyrics support : before 2024.07.10
