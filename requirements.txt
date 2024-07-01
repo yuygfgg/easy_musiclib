@@ -1,0 +1,5 @@
+Flask==3.0.3
+Flask_Cors==4.0.1
+mutagen==1.46.0
+Pygments==2.18.0
+Requests==2.32.3
