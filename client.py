@@ -6,7 +6,7 @@ import subprocess
 from pygments import highlight, lexers, formatters
 
 class MusicLibraryClient:
-    def __init__(self, base_url="http://127.0.0.1:5000"):
+    def __init__(self, base_url="http://127.0.0.1:5010"):
         self.base_url = base_url
         self.headers = {"Content-Type": "application/json"}
 

@@ -92,6 +92,7 @@ class MusicLibrary:
         self.artists[artist.uuid] = artist
 
     def find_artist_by_name(self, name):
+        name = name.strip()
         name = name.lower()
         for artist in self.artists.values():
             if artist.name == name:
@@ -99,12 +100,14 @@ class MusicLibrary:
         return None
 
     def find_album_by_name(self, name):
+        name = name.strip()
         for album in self.albums.values():
             if album.name == name:
                 return album
         return None
 
     def find_song_by_name(self, name):
+        name = name.strip()
         for song in self.songs.values():
             if song.name == name:
                 return song
@@ -137,9 +140,10 @@ class MusicLibrary:
                         track_number = id3_tags['track_number']
                         disc_number = id3_tags['disc_number']
                         year = id3_tags['year']
-
+                        
                         album = self.find_album_by_name(album_name)
                         if not album:
+                            print(f"Adding new album {album_name} because it doesn't exist now.")
                             album = Album(album_name)
                             self.add_album(album)
 

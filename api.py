@@ -244,4 +244,4 @@ def getfile():
     return send_file(file_path, as_attachment=True)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    app.run(debug=True, port=5010, host='0.0.0.0')
