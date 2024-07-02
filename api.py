@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response
 from musiclib import MusicLibrary, Artist, Album, Song
 import os
 import atexit
@@ -242,6 +242,22 @@ def getfile():
         return jsonify({'message': 'File not found'}), 404
 
     return send_file(file_path, as_attachment=True)
+
+@app.route('/getStream', methods=['GET'])
+def get_stream():
+    file_path = request.args.get('file_path')
+    if not file_path or not os.path.exists(file_path):
+        return jsonify({'message': 'File not found'}), 404
+    
+    # Determine the MIME type based on the file extension
+    if file_path.endswith('.mp3'):
+        mimetype = 'audio/mpeg'
+    elif file_path.endswith('.flac'):
+        mimetype = 'audio/flac'
+    else:
+        return jsonify({'message': 'Unsupported audio format'}), 400
+
+    return send_file(file_path, mimetype=mimetype)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5010, host='0.0.0.0')

@@ -378,7 +378,6 @@
                     return;
                 }
 
-                const songUrl = `${apiBaseUrl}/getfile?file_path=${encodeURIComponent(song.file_path)}`;
 
                 // 获取歌曲封面
                 const songArtBlob = await fetchFile(song.song_art_path);
@@ -391,7 +390,7 @@
                 window.parent.postMessage({
                     action: 'playSong',
                     song: {
-                        url: songUrl,
+                        filePath: song.file_path,
                         art: songArtUrl,
                         title: song.name,
                         artists: song.artists.map(artist => ({ name: artist.name, uuid: artist.uuid })),

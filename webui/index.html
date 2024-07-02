@@ -243,35 +243,18 @@
     // 播放器控制逻辑
     const audioPlayer = document.getElementById('audio-player');
 
-    async function fetchFile(filePath) {
-        try {
-            const response = await fetch(`${apiBaseUrl}/getfile?file_path=${encodeURIComponent(filePath)}`);
-            if (response.ok) {
-                return response.blob();
-            } else {
-                console.error('Failed to fetch file:', response.statusText);
-            }
-        } catch (error) {
-            console.error('Error:', error);
-        }
-        return null;
-    }
-
     async function playSong(song) {
-    try {
-        console.log('Playing song:', song);
+        try {
+            console.log('Playing song:', song);
 
-        // 暂停并重置当前音频
-        audioPlayer.pause();
-        audioPlayer.src = ''; // 清空当前 src
-        audioPlayer.load(); // 重置音频元素
+            // 暂停并重置当前音频
+            audioPlayer.pause();
+            audioPlayer.src = ''; // 清空当前 src
+            audioPlayer.load(); // 重置音频元素
 
-        const response = await fetch(song.url);
-        if (response.ok) {
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-
-            audioPlayer.src = url;
+            const streamUrl = `${apiBaseUrl}/getStream?file_path=${encodeURIComponent(song.filePath)}`;
+            audioPlayer.src = streamUrl;
+            console.log(streamUrl);
             audioPlayer.play();
             isPlaying = true;
             updatePlayPauseButton();
@@ -305,13 +288,10 @@
             };
 
             currentSongUUID = song.uuid;
-        } else {
-            console.error('Failed to fetch audio file:', response.statusText);
+        } catch (error) {
+            console.error('Error:', error);
         }
-    } catch (error) {
-        console.error('Error:', error);
     }
-}
 
     function navigateToArtistPage(artistUUID) {
         navigateTo(`artist.html?uuid=${artistUUID}`);
