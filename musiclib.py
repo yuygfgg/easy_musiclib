@@ -4,16 +4,19 @@ import os
 import uuid
 from musiclib_display import MusicLibraryDisplay
 import re
+from datetime import datetime
 
 class Artist:
     def __init__(self, name):
         self.name = name.lower()
         self.uuid = str(uuid.uuid4())
         self.is_liked = False
+        self.liked_time = None  # 新增属性 liked_time
         self.artist_art_path = ""
 
     def like(self):
         self.is_liked = True
+        self.liked_time = datetime.now()  # 更新 liked_time
         print(f"Artist {self.name} liked.")
 
     def unlike(self):
@@ -27,11 +30,13 @@ class Album:
         self.album_artists = set()
         self.songs = []
         self.is_liked = False
+        self.liked_time = None  # 新增属性 liked_time
         self.album_art_path = ""
-        self.year = None  # New attribute for year
+        self.year = None  # 新增属性 year
 
     def like(self):
         self.is_liked = True
+        self.liked_time = datetime.now()  # 更新 liked_time
         print(f"Album {self.name} liked.")
 
     def unlike(self):
@@ -56,8 +61,9 @@ class Song:
         self.track_number = track_number
         self.disc_number = disc_number
         self.is_liked = False
+        self.liked_time = None  # 新增属性 liked_time
         self.song_art_path = self.find_art_path(file_path)
-        self.year = year  # New attribute for year
+        self.year = year  # 新增属性 year
 
     def find_art_path(self, file_path):
         folder_path = os.path.dirname(file_path)
@@ -69,6 +75,7 @@ class Song:
 
     def like(self):
         self.is_liked = True
+        self.liked_time = datetime.now()  # 更新 liked_time
         print(f"Song {self.name} liked.")
 
     def unlike(self):

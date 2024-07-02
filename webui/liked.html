@@ -109,6 +109,10 @@
                 const likedArtists = await likedArtistsResponse.json();
                 const likedAlbums = await likedAlbumsResponse.json();
 
+                likedSongs.sort((a, b) => new Date(b.liked_time) - new Date(a.liked_time));
+                likedArtists.sort((a, b) => new Date(b.liked_time) - new Date(a.liked_time));
+                likedAlbums.sort((a, b) => new Date(b.liked_time) - new Date(a.liked_time));
+
                 displayLikedSongs(likedSongs);
                 displayLikedArtists(likedArtists);
                 displayLikedAlbums(likedAlbums);
@@ -377,7 +381,6 @@
                     console.error('Error: song.file_path is undefined');
                     return;
                 }
-
 
                 // 获取歌曲封面
                 const songArtBlob = await fetchFile(song.song_art_path);
