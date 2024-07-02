@@ -197,6 +197,24 @@
     let isRepeating = false;
     let currentSongUUID = null;
 
+    if (!window.webkit || !window.webkit.messageHandlers) {
+        var storedApiBaseUrl = localStorage.getItem('apiBaseUrl');
+        if (storedApiBaseUrl) {
+            apiBaseUrl = storedApiBaseUrl;
+        }
+    }
+
+    function saveApiBaseUrl(apiBaseUrl) {
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.saveApiBaseUrl) {
+            window.webkit.messageHandlers.saveApiBaseUrl.postMessage(apiBaseUrl);
+        } else {
+            // Fallback for web server environment
+            console.log("Saving apiBaseUrl:", apiBaseUrl);
+            localStorage.setItem('apiBaseUrl', apiBaseUrl);
+        }
+    }
+    
+
     function navigateTo(url) {
         const iframe = document.getElementById('content-frame');
         const newUrl = `${url}&apibaseUrl=${encodeURIComponent(apiBaseUrl)}`;
@@ -233,6 +251,7 @@
         } else {
             alert('请输入apibaseurl');
         }
+        saveApiBaseUrl(apiBaseUrl);
     }
 
     function navigateToLiked() {
