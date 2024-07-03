@@ -7,6 +7,8 @@ from musiclib_display import MusicLibraryDisplay
 import re
 from datetime import datetime
 import subprocess  # 用于调用ffmpeg
+import tempfile
+import shutil
 
 class Artist:
     def __init__(self, name):
@@ -325,19 +327,32 @@ class MusicLibrary:
         return None
 
     def extract_embedded_art(self, file_path):
-        folder_path = os.path.dirname(file_path)
-        art_path = os.path.join(folder_path, 'folder.jpg')
         try:
-            subprocess.run([
-                'ffmpeg', '-i', file_path, 
-                '-an', '-vcodec', 'copy', art_path
-            ], check=True)
-            if os.path.isfile(art_path):
-                return art_path
+            # 创建一个临时文件夹
+            with tempfile.TemporaryDirectory() as temp_dir:
+                art_path = os.path.join(temp_dir, 'folder.jpg')
+
+                # 构建 ffmpeg 命令
+                ffmpeg_command = [
+                    'ffmpeg', '-i', file_path,
+                    '-an', '-vcodec', 'mjpeg', '-update', '1', '-y', art_path
+                ]
+
+                # 执行 ffmpeg 命令
+                subprocess.run(ffmpeg_command, check=True, shell=False)
+
+                # 检查文件是否存在并返回路径
+                if os.path.isfile(art_path):
+                    # 将临时文件复制到目标路径
+                    final_art_path = os.path.join(os.path.dirname(file_path), 'folder.jpg')
+                    shutil.copyfile(art_path, final_art_path)
+                    return final_art_path
         except subprocess.CalledProcessError as e:
             print(f"Error extracting embedded art from {file_path}: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
         return ""
-
+    
     def search_song(self, name):
         return self.find_song_by_name(name)
 
