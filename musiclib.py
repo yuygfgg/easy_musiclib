@@ -1,3 +1,4 @@
+from rapidfuzz import process, fuzz
 from mutagen.easyid3 import EasyID3
 from mutagen.flac import FLAC
 import os
@@ -5,6 +6,7 @@ import uuid
 from musiclib_display import MusicLibraryDisplay
 import re
 from datetime import datetime
+import subprocess  # 用于调用ffmpeg
 
 class Artist:
     def __init__(self, name):
@@ -67,7 +69,7 @@ class Song:
 
     def find_art_path(self, file_path):
         folder_path = os.path.dirname(file_path)
-        for art_file in ['folder.jpg', 'cover.jpg']:
+        for art_file in ['folder.jpg', 'cover.jpg', 'folder.png', 'cover.png', 'folder.tif', 'cover.tif', 'folder.tiff', 'cover.tiff', 'folder.jpeg', 'cover.jpeg']:
             art_path = os.path.join(folder_path, art_file)
             if os.path.isfile(art_path):
                 return art_path
@@ -147,7 +149,7 @@ class MusicLibrary:
                         track_number = id3_tags['track_number']
                         disc_number = id3_tags['disc_number']
                         year = id3_tags['year']
-                        
+
                         album = self.find_album_by_name(album_name)
                         if not album:
                             print(f"Adding new album {album_name} because it doesn't exist now.")
@@ -176,6 +178,13 @@ class MusicLibrary:
                         # Set album art path if not already set
                         if not album.album_art_path:
                             album.album_art_path = song.song_art_path
+                            if not album.album_art_path:
+                                album.album_art_path = self.extract_embedded_art(song.file_path)
+                                if album.album_art_path:
+                                    # Update song art path for all songs in the album
+                                    for s in album.songs:
+                                        if not s.song_art_path:
+                                            s.song_art_path = album.album_art_path
 
                         album.update_year()  # Update album year based on song year
 
@@ -183,9 +192,18 @@ class MusicLibrary:
                         for artist in album.album_artists:
                             if not artist.artist_art_path:
                                 artist.artist_art_path = album.album_art_path
+
+                        for artist in song_artists:
+                            if not artist.artist_art_path:
+                                artist.artist_art_path = album.album_art_path
+                                if not artist.artist_art_path:
+                                    artist.artist_art_path = song.song_art_path
+
                     except Exception as e:
                         print(f"Error processing file {file_path}: {e}")
                         continue
+
+
 
     def extract_id3_tags(self, file_path):
         file_extension = os.path.splitext(file_path)[1].lower()
@@ -306,6 +324,20 @@ class MusicLibrary:
                 return int(match.group(1))
         return None
 
+    def extract_embedded_art(self, file_path):
+        folder_path = os.path.dirname(file_path)
+        art_path = os.path.join(folder_path, 'folder.jpg')
+        try:
+            subprocess.run([
+                'ffmpeg', '-i', file_path, 
+                '-an', '-vcodec', 'copy', art_path
+            ], check=True)
+            if os.path.isfile(art_path):
+                return art_path
+        except subprocess.CalledProcessError as e:
+            print(f"Error extracting embedded art from {file_path}: {e}")
+        return ""
+
     def search_song(self, name):
         return self.find_song_by_name(name)
 
@@ -358,17 +390,34 @@ class MusicLibrary:
             print(f"Album {uuid} not found.")
     
     def search(self, query):
-        import re
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
-        
-        matched_songs = [song for song in self.songs.values() if pattern.search(song.name)]
-        matched_albums = [album for album in self.albums.values() if pattern.search(album.name)]
-        matched_artists = [artist for artist in self.artists.values() if pattern.search(artist.name)]
+        # Extracting names from songs, albums, and artists
+        song_names = {song_id: song.name for song_id, song in self.songs.items()}
+        album_names = {album_id: album.name for album_id, album in self.albums.items()}
+        artist_names = {artist_id: artist.name for artist_id, artist in self.artists.items()}
+
+        # Using RapidFuzz to find best matches
+        matched_songs = process.extract(query, song_names, limit=10, scorer=fuzz.partial_ratio)
+        matched_albums = process.extract(query, album_names, limit=10, scorer=fuzz.partial_ratio)
+        matched_artists = process.extract(query, artist_names, limit=10, scorer=fuzz.partial_ratio)
+
+        # Collecting matched objects with scores
+        matched_songs = [(self.songs[song_id], score) for song_id, score in matched_songs if score > 50]
+        matched_albums = [(self.albums[album_id], score) for album_id, score in matched_albums if score > 50]
+        matched_artists = [(self.artists[artist_id], score) for artist_id, score in matched_artists if score > 50]
+
+        # Combine all matches into a single list and sort by score
+        combined_matches = matched_songs + matched_albums + matched_artists
+        combined_matches.sort(key=lambda x: x[1], reverse=True)
+
+        # Separate the combined list back into songs, albums, and artists
+        final_songs = [match[0] for match in combined_matches if isinstance(match[0], Song)]
+        final_albums = [match[0] for match in combined_matches if isinstance(match[0], Album)]
+        final_artists = [match[0] for match in combined_matches if isinstance(match[0], Artist)]
 
         return {
-            'songs': matched_songs,
-            'albums': matched_albums,
-            'artists': matched_artists
+            'songs': final_songs,
+            'albums': final_albums,
+            'artists': final_artists
         }
 
 if __name__ == "__main__":
