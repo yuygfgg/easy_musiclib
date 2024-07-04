@@ -255,7 +255,18 @@
 
                 const songArtist = document.createElement('div');
                 songArtist.className = 'artist';
-                songArtist.textContent = song.artists.map(artist => artist.name).join(', ');
+                song.artists.forEach(artist => {
+                    const artistLink = document.createElement('a');
+                    artistLink.href = '#';
+                    artistLink.textContent = artist.name;
+                    artistLink.style.color = '#007bff';
+                    artistLink.style.marginRight = '5px';
+                    artistLink.onclick = (event) => {
+                        event.stopPropagation();
+                        window.parent.postMessage({ action: 'navigateTo', url: `artist.html?uuid=${artist.uuid}` }, '*');
+                    };
+                    songArtist.appendChild(artistLink);
+                });
 
                 const albumName = document.createElement('a');
                 albumName.className = 'album-name';

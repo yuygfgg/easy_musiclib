@@ -218,10 +218,14 @@
             songArtist.className = 'artist';
             song.artists.forEach(artist => {
                 const artistLink = document.createElement('a');
-                artistLink.href = `artist.html?uuid=${artist.uuid}`;
+                artistLink.href = '#';
                 artistLink.textContent = artist.name;
                 artistLink.style.color = '#007bff';
                 artistLink.style.marginRight = '5px';
+                artistLink.onclick = (event) => {
+                    event.stopPropagation();
+                    window.parent.postMessage({ action: 'navigateTo', url: `artist.html?uuid=${artist.uuid}` }, '*');
+                };
                 songArtist.appendChild(artistLink);
             });
 
