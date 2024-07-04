@@ -405,36 +405,20 @@ class MusicLibrary:
             print(f"Album {uuid} not found.")
     
     def search(self, query):
-        # Extracting names from songs, albums, and artists
-        song_names = {song_id: song.name for song_id, song in self.songs.items()}
-        album_names = {album_id: album.name for album_id, album in self.albums.items()}
-        artist_names = {artist_id: artist.name for artist_id, artist in self.artists.items()}
-
-        # Using RapidFuzz to find best matches
-        matched_songs = process.extract(query, song_names, limit=10, scorer=fuzz.partial_ratio)
-        matched_albums = process.extract(query, album_names, limit=10, scorer=fuzz.partial_ratio)
-        matched_artists = process.extract(query, artist_names, limit=10, scorer=fuzz.partial_ratio)
-
-        # Collecting matched objects with scores
-        matched_songs = [(self.songs[song_id], score) for song_id, score in matched_songs if score > 50]
-        matched_albums = [(self.albums[album_id], score) for album_id, score in matched_albums if score > 50]
-        matched_artists = [(self.artists[artist_id], score) for artist_id, score in matched_artists if score > 50]
-
-        # Combine all matches into a single list and sort by score
-        combined_matches = matched_songs + matched_albums + matched_artists
-        combined_matches.sort(key=lambda x: x[1], reverse=True)
-
-        # Separate the combined list back into songs, albums, and artists
-        final_songs = [match[0] for match in combined_matches if isinstance(match[0], Song)]
-        final_albums = [match[0] for match in combined_matches if isinstance(match[0], Album)]
-        final_artists = [match[0] for match in combined_matches if isinstance(match[0], Artist)]
+        import re
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
+        
+        matched_songs = [song for song in self.songs.values() if pattern.search(song.name)]
+        matched_albums = [album for album in self.albums.values() if pattern.search(album.name)]
+        matched_artists = [artist for artist in self.artists.values() if pattern.search(artist.name)]
 
         return {
-            'songs': final_songs,
-            'albums': final_albums,
-            'artists': final_artists
+            'songs': matched_songs,
+            'albums': matched_albums,
+            'artists': matched_artists
         }
 
+        
 if __name__ == "__main__":
     library = MusicLibrary()
     library.scan('/Users/a1/other')
