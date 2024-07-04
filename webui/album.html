@@ -88,7 +88,7 @@
 <script>
     let apiBaseUrl = 'http://127.0.0.1:5010';
     const urlParams = new URLSearchParams(window.location.search);
-    const albumUUID = urlParams.get('uuid'); // 从URL参数获取UUID
+    const albumUUID = urlParams.get('uuid');
     apiBaseUrl = urlParams.get('apibaseUrl');
 
     if (!albumUUID) {
@@ -98,14 +98,14 @@
 
     let currentIndex = 0;
     let songs = [];
-    let currentSong = null; // 当前播放的歌曲对象
+    let currentSong = null;
 
     async function fetchAlbumData() {
         try {
             const response = await fetch(`${apiBaseUrl}/show_album/${albumUUID}`);
             if (response.ok) {
                 const albumData = await response.json();
-                console.log('Fetched album data:', albumData); // Log album data
+                console.log('Fetched album data:', albumData);
                 songs = albumData.songs;
                 displayAlbumData(albumData);
             } else {
@@ -131,7 +131,6 @@
     }
 
     async function displayAlbumData(album) {
-        // 获取专辑封面
         const albumArtBlob = await fetchFile(album.album_art_path);
         if (albumArtBlob) {
             const albumArtUrl = URL.createObjectURL(albumArtBlob);
@@ -160,7 +159,6 @@
         const songList = document.getElementById('song-list');
         songList.innerHTML = '';
 
-        // 按照 disc_number 和 track_number 排序
         album.songs.sort((a, b) => {
             if (a.disc_number === b.disc_number) {
                 return a.track_number - b.track_number;
@@ -169,11 +167,9 @@
             }
         });
 
-        // 记录当前的 disc_number
         let currentDiscNumber = -1;
 
         for (const [index, song] of album.songs.entries()) {
-            // 如果当前的 disc_number 发生了变化，添加分隔符
             if (song.disc_number !== currentDiscNumber) {
                 currentDiscNumber = song.disc_number;
                 const discSeparator = document.createElement('div');
@@ -186,7 +182,7 @@
 
             const songItem = document.createElement('div');
             songItem.className = 'song-item';
-            songItem.id = `song-${song.uuid}`; // 设置ID以便后续更新
+            songItem.id = `song-${song.uuid}`;
             songItem.onclick = (event) => {
                 if (event.target.tagName.toLowerCase() !== 'span' && event.target.tagName.toLowerCase() !== 'a') {
                     fetchAndPlaySong(index);
@@ -251,7 +247,6 @@
             songItem.appendChild(songActions);
             songList.appendChild(songItem);
         }
-        // 添加底部填充元素
         const paddingElement = document.createElement('div');
         paddingElement.style.height = '100px';
         songList.appendChild(paddingElement);
@@ -292,11 +287,11 @@
         currentIndex = index;
         const uuid = songs[index].uuid;
         try {
-            console.log('Fetching song details for uuid:', uuid); // Log UUID
+            console.log('Fetching song details for uuid:', uuid);
             const response = await fetch(`${apiBaseUrl}/show_song/${uuid}`);
             if (response.ok) {
                 const song = await response.json();
-                console.log('Fetched song details:', song); // Log song details
+                console.log('Fetched song details:', song);
                 playSong(song);
             } else {
                 console.error('Failed to fetch song details:', response.statusText);
@@ -314,15 +309,12 @@
                 return;
             }
 
-
-            // 获取歌曲封面
             const songArtBlob = await fetchFile(song.song_art_path);
             let songArtUrl = 'default_cover.png';
             if (songArtBlob) {
                 songArtUrl = URL.createObjectURL(songArtBlob);
             }
 
-            // 发送消息给父窗口以播放歌曲
             window.parent.postMessage({
                 action: 'playSong',
                 song: {
@@ -345,7 +337,6 @@
 
     async function toggleSongLike(uuid) {
         try {
-            // 获取当前歌曲的最新状态
             const response = await fetch(`${apiBaseUrl}/show_song/${uuid}`);
             if (response.ok) {
                 const song = await response.json();
@@ -360,9 +351,9 @@
                     const updatedSongResponse = await fetch(`${apiBaseUrl}/show_song/${uuid}`);
                     if (updatedSongResponse.ok) {
                         const updatedSong = await updatedSongResponse.json();
-                        updateSongListIcon(uuid, updatedSong.is_liked); // 更新列表中的爱心图标
+                        updateSongListIcon(uuid, updatedSong.is_liked);
                         if (currentSong && currentSong.uuid === uuid) {
-                            currentSong.is_liked = updatedSong.is_liked; // 更新当前播放的歌曲状态
+                            currentSong.is_liked = updatedSong.is_liked;
                         }
                     }
                 } else {
@@ -385,7 +376,6 @@
         }
     }
 
-    // 处理来自父窗口的消息
     window.addEventListener('message', (event) => {
         if (event.data.action === 'previous') {
             playPreviousSong();
@@ -405,13 +395,13 @@
         await toggleSongLike(currentSong.uuid);
     }
 
-    let isDebounced = false; // 增加一个防抖动标志
+    let isDebounced = false;
 
     function playNextSong() {
-        if (isDebounced) return; // 如果已经在防抖动期间，则直接返回
+        if (isDebounced) return;
 
-        isDebounced = true; // 设置防抖动标志
-        setTimeout(() => { isDebounced = false; }, 1000); // 1秒后解除防抖动
+        isDebounced = true;
+        setTimeout(() => { isDebounced = false; }, 1000);
 
         console.log("next song!");
         currentIndex = (currentIndex + 1) % songs.length;
@@ -419,17 +409,16 @@
     }
 
     function playPreviousSong() {
-        if (isDebounced) return; // 如果已经在防抖动期间，则直接返回
+        if (isDebounced) return;
 
-        isDebounced = true; // 设置防抖动标志
-        setTimeout(() => { isDebounced = false; }, 1000); // 1秒后解除防抖动
+        isDebounced = true;
+        setTimeout(() => { isDebounced = false; }, 1000);
 
         currentIndex = (currentIndex - 1 + songs.length) % songs.length;
         fetchAndPlaySong(currentIndex);
     }
 
     fetchAlbumData();
-    // 处理来自父窗口的消息
     window.addEventListener('message', (event) => {
         if (event.data.action === 'previous') {
             playPreviousSong();

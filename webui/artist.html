@@ -103,7 +103,7 @@
     <script>
         let apiBaseUrl = 'http://127.0.0.1:5010';
         const urlParams = new URLSearchParams(window.location.search);
-        const artistUUID = urlParams.get('uuid'); // 从URL参数获取UUID
+        const artistUUID = urlParams.get('uuid');
         apiBaseUrl = urlParams.get('apibaseUrl');
 
         if (!artistUUID) {
@@ -113,7 +113,7 @@
 
         let currentIndex = 0;
         let songs = [];
-        let currentSong = null; // 当前播放的歌曲对象
+        let currentSong = null;
 
         async function fetchArtistData() {
             try {
@@ -146,7 +146,6 @@
         }
 
         async function displayArtistData(artist) {
-            // 获取艺术家图片
             const artistArtBlob = await fetchFile(artist.artist_art_path);
             if (artistArtBlob) {
                 const artistArtUrl = URL.createObjectURL(artistArtBlob);
@@ -208,7 +207,6 @@
 
             const songList = document.getElementById('song-list');
             songList.innerHTML = '';
-            // 按照专辑名、disc_number、track_number排序
             songs.sort((a, b) => {
                 if (a.album.name !== b.album.name) {
                     return a.album.name.localeCompare(b.album.name);
@@ -219,7 +217,6 @@
                 }
             });
 
-            // 显示排序后的歌曲列表
             songs.forEach((song, index) => {
                 const songItem = document.createElement('div');
                 songItem.className = 'song-item';
@@ -320,15 +317,12 @@
                     return;
                 }
 
-
-                // 获取歌曲封面
                 const songArtBlob = await fetchFile(song.song_art_path);
                 let songArtUrl = 'default_cover.png';
                 if (songArtBlob) {
                     songArtUrl = URL.createObjectURL(songArtBlob);
                 }
 
-                // 发送消息给父窗口以播放歌曲
                 window.parent.postMessage({
                     action: 'playSong',
                     song: {
@@ -365,14 +359,12 @@
                         const updatedSongResponse = await fetch(`${apiBaseUrl}/show_song/${uuid}`);
                         if (updatedSongResponse.ok) {
                             const updatedSong = await updatedSongResponse.json();
-                            // 发送消息给父窗口更新爱心图标状态
                             window.parent.postMessage({
                                 action: 'updateSongLike',
                                 uuid: updatedSong.uuid,
                                 isLiked: updatedSong.is_liked
                             }, '*');
 
-                            // 更新列表中的爱心图标
                             updateSongListIcon(updatedSong.uuid, updatedSong.is_liked);
                         }
                     } else {
@@ -417,7 +409,6 @@
             }
         }
 
-        // 处理来自父窗口的消息
         window.addEventListener('message', (event) => {
             if (event.data.action === 'previous') {
                 playPreviousSong();
@@ -439,13 +430,13 @@
             }
         }
 
-        let isDebounced = false; // 增加一个防抖动标志
+        let isDebounced = false;
 
         function playNextSong() {
-            if (isDebounced) return; // 如果已经在防抖动期间，则直接返回
+            if (isDebounced) return;
 
-            isDebounced = true; // 设置防抖动标志
-            setTimeout(() => { isDebounced = false; }, 1000); // 1秒后解除防抖动
+            isDebounced = true;
+            setTimeout(() => { isDebounced = false; }, 1000);
 
             console.log("next song!");
             currentIndex = (currentIndex + 1) % songs.length;
@@ -453,10 +444,10 @@
         }
 
         function playPreviousSong() {
-            if (isDebounced) return; // 如果已经在防抖动期间，则直接返回
+            if (isDebounced) return;
 
-            isDebounced = true; // 设置防抖动标志
-            setTimeout(() => { isDebounced = false; }, 1000); // 1秒后解除防抖动
+            isDebounced = true;
+            setTimeout(() => { isDebounced = false; }, 1000);
 
             currentIndex = (currentIndex - 1 + songs.length) % songs.length;
             fetchAndPlaySong(currentIndex);

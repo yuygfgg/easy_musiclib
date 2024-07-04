@@ -12,7 +12,6 @@ CORS(app)
 library = MusicLibrary()
 data_file = 'library_data.pkl'
 
-# Function to load the library from a file
 def load_library():
     global library
     try:
@@ -25,7 +24,6 @@ def load_library():
     except Exception as e:
         print(f"Failed to load library from file: {e}")
 
-# Function to save the library to a file
 def save_library():
     try:
         with open(data_file, 'wb') as f:
@@ -34,13 +32,10 @@ def save_library():
     except Exception as e:
         print(f"Failed to save library to file: {e}")
 
-# Load the library at startup
 load_library()
 
-# Register the save_library function to be called on exit
 atexit.register(save_library)
 
-# Handle SIGINT (Ctrl+C) to ensure the library is saved
 def handle_sigint(signal, frame):
     print("SIGINT received. Saving library and exiting...")
     save_library()
@@ -63,8 +58,8 @@ def add_song():
     
     song = Song(name, album, artists, file_path, track_number, disc_number, year)
     library.add_song(song)
-    album.update_year()  # Update album year based on song year
-    save_library()  # Save after adding
+    album.update_year()
+    save_library()
     return jsonify({'message': 'Song added', 'uuid': song.uuid, 'year': song.year}), 201
 
 @app.route('/add_album', methods=['GET'])
@@ -72,9 +67,9 @@ def add_album():
     name = request.args.get('name')
     year = request.args.get('year')
     album = Album(name)
-    album.year = year  # Set the year for the album
+    album.year = year
     library.add_album(album)
-    save_library()  # Save after adding
+    save_library()
     return jsonify({'message': 'Album added', 'uuid': album.uuid, 'year': album.year}), 201
 
 @app.route('/add_artist', methods=['GET'])
@@ -82,43 +77,43 @@ def add_artist():
     name = request.args.get('name')
     artist = Artist(name)
     library.add_artist(artist)
-    save_library()  # Save after adding
+    save_library()
     return jsonify({'message': 'Artist added', 'uuid': artist.uuid}), 201
 
 @app.route('/like_song/<uuid>', methods=['GET'])
 def like_song(uuid):
     library.like_song(uuid)
-    save_library()  # Save after liking
+    save_library()
     return jsonify({'message': 'Song liked'}), 200
 
 @app.route('/unlike_song/<uuid>', methods=['GET'])
 def unlike_song(uuid):
     library.unlike_song(uuid)
-    save_library()  # Save after unliking
+    save_library()
     return jsonify({'message': 'Song unliked'}), 200
 
 @app.route('/like_album/<uuid>', methods=['GET'])
 def like_album(uuid):
     library.like_album(uuid)
-    save_library()  # Save after liking
+    save_library()
     return jsonify({'message': 'Album liked'}), 200
 
 @app.route('/unlike_album/<uuid>', methods=['GET'])
 def unlike_album(uuid):
     library.unlike_album(uuid)
-    save_library()  # Save after unliking
+    save_library()
     return jsonify({'message': 'Album unliked'}), 200
 
 @app.route('/like_artist/<uuid>', methods=['GET'])
 def like_artist(uuid):
     library.like_artist(uuid)
-    save_library()  # Save after liking
+    save_library()
     return jsonify({'message': 'Artist liked'}), 200
 
 @app.route('/unlike_artist/<uuid>', methods=['GET'])
 def unlike_artist(uuid):
     library.unlike_artist(uuid)
-    save_library()  # Save after unliking
+    save_library()
     return jsonify({'message': 'Artist unliked'}), 200
 
 @app.route('/scan', methods=['GET'])
@@ -128,10 +123,8 @@ def scan():
         return jsonify({'message': 'Directory is required'}), 400
 
     library.scan(directory)
-    save_library()  # Save after scanning
+    save_library()
     return jsonify({'message': 'Scan completed'}), 200
-
-# The rest of the routes remain the same
 
 @app.route('/search_song/<name>', methods=['GET'])
 def search_song(name):
@@ -171,7 +164,7 @@ def show_liked_songs():
         'album': song.album, 
         'song_art_path': song.song_art_path, 
         'is_liked': song.is_liked,
-        'liked_time': song.liked_time,  # 返回 liked_time
+        'liked_time': song.liked_time,
         'file_path': song.file_path
     } for song in library.songs.values() if song.is_liked]
     return jsonify(liked_songs), 200
@@ -183,7 +176,7 @@ def show_liked_artists():
         'uuid': artist.uuid, 
         'artist_art_path': artist.artist_art_path, 
         'is_liked': artist.is_liked,
-        'liked_time': artist.liked_time  # 返回 liked_time
+        'liked_time': artist.liked_time
     } for artist in library.artists.values() if artist.is_liked]
     return jsonify(liked_artists), 200
 
@@ -195,7 +188,7 @@ def show_liked_albums():
         'year': album.year, 
         'album_art_path': album.album_art_path, 
         'is_liked': album.is_liked,
-        'liked_time': album.liked_time  # 返回 liked_time
+        'liked_time': album.liked_time
     } for album in library.albums.values() if album.is_liked]
     return jsonify(liked_albums), 200
 
@@ -212,9 +205,9 @@ def show_song(uuid):
             'track_number': song.track_number,
             'disc_number': song.disc_number,
             'is_liked': song.is_liked,
-            'liked_time': song.liked_time,  # 返回 liked_time
+            'liked_time': song.liked_time,
             'song_art_path': song.song_art_path,
-            'year': song.year  # Include the year in the response
+            'year': song.year
         }), 200
     return jsonify({'message': 'Song not found'}), 404
 
@@ -228,9 +221,9 @@ def show_album(uuid):
             'album_artists': [{'name': artist.name, 'uuid': artist.uuid} for artist in album.album_artists],
             'songs': [{'name': song.name, 'uuid': song.uuid, 'artists': song.artists, 'album': song.album, 'song_art_path': song.song_art_path, 'is_liked': song.is_liked, 'track_number': song.track_number, 'disc_number': song.disc_number} for song in album.songs],
             'is_liked': album.is_liked,
-            'liked_time': album.liked_time,  # 返回 liked_time
+            'liked_time': album.liked_time,
             'album_art_path': album.album_art_path,
-            'year': album.year  # Include the year in the response
+            'year': album.year
         }), 200
     return jsonify({'message': 'Album not found'}), 404
 
@@ -246,7 +239,7 @@ def show_artist(uuid):
             'albums': albums,
             'songs': songs,
             'is_liked': artist.is_liked,
-            'liked_time': artist.liked_time,  # 返回 liked_time
+            'liked_time': artist.liked_time,
             'artist_art_path': artist.artist_art_path
         }), 200
     return jsonify({'message': 'Artist not found'}), 404
@@ -274,7 +267,6 @@ def get_stream():
     if not file_path or not os.path.exists(file_path):
         return jsonify({'message': 'File not found'}), 404
     
-    # Determine the MIME type based on the file extension
     if file_path.endswith('.mp3'):
         mimetype = 'audio/mpeg'
     elif file_path.endswith('.flac'):

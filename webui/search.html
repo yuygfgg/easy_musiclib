@@ -89,7 +89,6 @@
     <script>
         let apiBaseUrl = 'http://127.0.0.1:5010';
 
-        // 从 URL 获取查询参数并执行搜索
         const urlParams = new URLSearchParams(window.location.search);
         apiBaseUrl = urlParams.get('apibaseUrl')
         const query = urlParams.get('query');
@@ -292,14 +291,12 @@
                     return;
                 }
 
-                // 获取歌曲封面
                 const songArtBlob = await fetchFile(song.song_art_path);
                 let songArtUrl = 'default_cover.png';
                 if (songArtBlob) {
                     songArtUrl = URL.createObjectURL(songArtBlob);
                 }
 
-                // 发送消息给父窗口以播放歌曲
                 window.parent.postMessage({
                     action: 'playSong',
                     song: {
@@ -336,7 +333,6 @@
                         const updatedSongResponse = await fetch(`${apiBaseUrl}/show_song/${uuid}`);
                         if (updatedSongResponse.ok) {
                             const updatedSong = await updatedSongResponse.json();
-                            // 更新爱心图标状态
                             likedIcon.className = updatedSong.is_liked ? 'text-danger liked' : 'liked';
                             likedIcon.innerHTML = updatedSong.is_liked ? '&#9829;' : '&#9825;';
                         }

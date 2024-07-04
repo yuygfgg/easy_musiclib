@@ -18,13 +18,13 @@ class MusicLibraryClient:
             "file_path": file_path,
             "track_number": track_number,
             "disc_number": disc_number,
-            "year": year  # 添加 year 参数
+            "year": year
         }
         response = requests.get(f"{self.base_url}/add_song", params=params, headers=self.headers)
         return response.json()
 
     def add_album(self, name, year=None):
-        params = {"name": name, "year": year}  # 添加 year 参数
+        params = {"name": name, "year": year}
         response = requests.get(f"{self.base_url}/add_album", params=params, headers=self.headers)
         return response.json()
 
@@ -133,7 +133,7 @@ class MusicLibraryConsole(Cmd):
         print(f"Disc Number: {song_info.get('disc_number')}")
         print(f"Song Art Path: {song_info.get('song_art_path')}")
         print(f"Is Liked: {song_info.get('is_liked')}")
-        print(f"Year: {song_info.get('year')}")  # 添加 year 信息
+        print(f"Year: {song_info.get('year')}")
 
     def print_album_details(self, album_info):
         print(f"Album: {album_info.get('name')}")
@@ -148,7 +148,7 @@ class MusicLibraryConsole(Cmd):
             print(f"  Disc Number: {song.get('disc_number')}")
         print(f"Album Art Path: {album_info.get('album_art_path')}")
         print(f"Is Liked: {album_info.get('is_liked')}")
-        print(f"Year: {album_info.get('year')}")  # 添加 year 信息
+        print(f"Year: {album_info.get('year')}")
 
     def print_artist_details(self, artist_info):
         print(f"Artist: {artist_info.get('name')}")
@@ -284,21 +284,17 @@ class MusicLibraryConsole(Cmd):
         temp_file_path = "temp_song.mp3"
         temp_art_path = "temp_art.jpg"
 
-        # Save audio file locally
         with open(temp_file_path, "wb") as f:
             f.write(file_content)
 
-        # Save album art locally if available
         art_path = song_info.get("song_art_path")
         if art_path:
             art_content = self.client.get_file(art_path)
             with open(temp_art_path, "wb") as f:
                 f.write(art_content)
-            # 使用 mpv 播放音乐，并显示封面图和进度条
             subprocess.run(["mpv", temp_file_path, "--image-display-duration=inf", f"--external-file={temp_art_path}"])
             os.remove(temp_art_path)
         else:
-            # 使用 mpv 播放音乐
             subprocess.run(["mpv", temp_file_path])
 
         os.remove(temp_file_path)
@@ -308,8 +304,8 @@ class MusicLibraryConsole(Cmd):
         if not args:
             print("Usage: search <query>")
             return
-        query = " ".join(args.split())  # 支持包含空格的搜索词
-        query = query.replace("/", "%2F")  # 支持包含 / 的搜索词
+        query = " ".join(args.split())
+        query = query.replace("/", "%2F")
         result = self.client.search(query)
         self.print_search_results(result)
 

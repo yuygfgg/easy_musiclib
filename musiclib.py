@@ -6,7 +6,7 @@ import uuid
 from musiclib_display import MusicLibraryDisplay
 import re
 from datetime import datetime
-import subprocess  # 用于调用ffmpeg
+import subprocess
 import tempfile
 import shutil
 
@@ -15,12 +15,12 @@ class Artist:
         self.name = name.lower()
         self.uuid = str(uuid.uuid4())
         self.is_liked = False
-        self.liked_time = None  # 新增属性 liked_time
+        self.liked_time = None
         self.artist_art_path = ""
 
     def like(self):
         self.is_liked = True
-        self.liked_time = datetime.now()  # 更新 liked_time
+        self.liked_time = datetime.now()
         print(f"Artist {self.name} liked.")
 
     def unlike(self):
@@ -34,13 +34,13 @@ class Album:
         self.album_artists = set()
         self.songs = []
         self.is_liked = False
-        self.liked_time = None  # 新增属性 liked_time
+        self.liked_time = None
         self.album_art_path = ""
-        self.year = None  # 新增属性 year
+        self.year = None
 
     def like(self):
         self.is_liked = True
-        self.liked_time = datetime.now()  # 更新 liked_time
+        self.liked_time = datetime.now()
         print(f"Album {self.name} liked.")
 
     def unlike(self):
@@ -48,7 +48,6 @@ class Album:
         print(f"Album {self.name} unliked.")
 
     def update_year(self):
-        # Set the album's year to any song's year if not already set
         if not self.year and self.songs:
             for song in self.songs:
                 if song.year:
@@ -65,9 +64,9 @@ class Song:
         self.track_number = track_number
         self.disc_number = disc_number
         self.is_liked = False
-        self.liked_time = None  # 新增属性 liked_time
+        self.liked_time = None
         self.song_art_path = self.find_art_path(file_path)
-        self.year = year  # 新增属性 year
+        self.year = year
 
     def find_art_path(self, file_path):
         folder_path = os.path.dirname(file_path)
@@ -79,7 +78,7 @@ class Song:
 
     def like(self):
         self.is_liked = True
-        self.liked_time = datetime.now()  # 更新 liked_time
+        self.liked_time = datetime.now()
         print(f"Song {self.name} liked.")
 
     def unlike(self):
@@ -177,20 +176,17 @@ class MusicLibrary:
                         self.add_song(song)
                         album.songs.append(song)
 
-                        # Set album art path if not already set
                         if not album.album_art_path:
                             album.album_art_path = song.song_art_path
                             if not album.album_art_path:
                                 album.album_art_path = self.extract_embedded_art(song.file_path)
                                 if album.album_art_path:
-                                    # Update song art path for all songs in the album
                                     for s in album.songs:
                                         if not s.song_art_path:
                                             s.song_art_path = album.album_art_path
 
-                        album.update_year()  # Update album year based on song year
+                        album.update_year()
 
-                        # Set artist art path if not already set
                         for artist in album.album_artists:
                             if not artist.artist_art_path:
                                 artist.artist_art_path = album.album_art_path
@@ -279,8 +275,17 @@ class MusicLibrary:
         if isinstance(album_artists, str):
             album_artists = [album_artists]  # Ensure it's always a list
 
-        track_number = int(audio.get('tracknumber', ['1'])[0].split('/')[0])
-        disc_number = int(audio.get('discnumber', ['1'])[0].split('/')[0])
+        try:
+            track_number = int(audio.get('tracknumber', ['1'])[0].split('/')[0])
+        except (ValueError, IndexError) as e:
+            print(f"Error processing track number: {e}")
+            track_number = 1
+
+        try:
+            disc_number = int(audio.get('discnumber', ['1'])[0].split('/')[0])
+        except (ValueError, IndexError) as e:
+            print(f"Error processing disc number: {e}")
+            disc_number = 1
 
         year = audio.get('date', [None])[0] or audio.get('year', [None])[0]
         year = self.extract_year(year)
@@ -288,7 +293,7 @@ class MusicLibrary:
         return self.parse_artists(title, album, artists, track_number, disc_number, album_artists, year)
 
     def parse_artists(self, title, album, artists, track_number=1, disc_number=1, album_artists=None, year=None):
-        delimiters = ['/', '&', ' x ', ';', '；', ',', '，', ' × ']
+        delimiters = ['/', '／', '&', ' x ', ';', '；', ',', '，', '×', '　', '、']
         parsed_artists = []
         for artist in artists:
             for delimiter in delimiters:
@@ -328,22 +333,17 @@ class MusicLibrary:
 
     def extract_embedded_art(self, file_path):
         try:
-            # 创建一个临时文件夹
             with tempfile.TemporaryDirectory() as temp_dir:
                 art_path = os.path.join(temp_dir, 'folder.jpg')
 
-                # 构建 ffmpeg 命令
                 ffmpeg_command = [
                     'ffmpeg', '-i', file_path,
                     '-an', '-vcodec', 'mjpeg', '-update', '1', '-y', art_path
                 ]
 
-                # 执行 ffmpeg 命令
                 subprocess.run(ffmpeg_command, check=True, shell=False)
 
-                # 检查文件是否存在并返回路径
                 if os.path.isfile(art_path):
-                    # 将临时文件复制到目标路径
                     final_art_path = os.path.join(os.path.dirname(file_path), 'folder.jpg')
                     shutil.copyfile(art_path, final_art_path)
                     return final_art_path
@@ -423,5 +423,4 @@ if __name__ == "__main__":
     library = MusicLibrary()
     library.scan('/Users/a1/other')
 
-    # 展示整个库
     library.display.show_library()
