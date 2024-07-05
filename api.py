@@ -5,9 +5,11 @@ import atexit
 import pickle
 import signal
 from flask_cors import CORS
+from flask_compress import Compress
 
 app = Flask(__name__)
 CORS(app)
+Compress(app)
 
 library = MusicLibrary()
 data_file = 'library_data.pkl'
