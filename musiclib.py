@@ -293,7 +293,7 @@ class MusicLibrary:
         return self.parse_artists(title, album, artists, track_number, disc_number, album_artists, year)
 
     def parse_artists(self, title, album, artists, track_number=1, disc_number=1, album_artists=None, year=None):
-        delimiters = ['/', '／', '&', ' x ', ';', '；', ',', '，', '×', '　', '、']
+        delimiters = ['/', '／', '&', '＆', ' x ', ';', '；', ',', '，', '×', '　', '、']
         parsed_artists = []
         for artist in artists:
             for delimiter in delimiters:

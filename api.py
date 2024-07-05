@@ -152,10 +152,32 @@ def search_artist(name):
 @app.route('/show_library', methods=['GET'])
 def show_library():
     return jsonify({
-        'artists': {artist.uuid: artist.name for artist in library.artists.values()},
-        'albums': {album.uuid: album.name for album in library.albums.values()},
-        'songs': {song.uuid: song.name for song in library.songs.values()}
-    }), 200
+            'songs': [{
+                'name': song.name, 
+                'uuid': song.uuid, 
+                'artists': song.artists, 
+                'album': song.album, 
+                'song_art_path': song.song_art_path, 
+                'is_liked': song.is_liked, 
+                'liked_time': song.liked_time, 
+                'file_path': song.file_path
+            } for song in library.songs.values()],
+            'albums': [{
+                'name': album.name, 
+                'uuid': album.uuid, 
+                'year': album.year, 
+                'album_art_path': album.album_art_path, 
+                'is_liked': album.is_liked, 
+                'liked_time': album.liked_time
+            } for album in library.albums.values()],
+            'artists': [{
+                'name': artist.name, 
+                'uuid': artist.uuid, 
+                'artist_art_path': artist.artist_art_path, 
+                'is_liked': artist.is_liked, 
+                'liked_time': artist.liked_time
+            } for artist in library.artists.values()]
+        }), 200
 
 @app.route('/show_liked_songs', methods=['GET'])
 def show_liked_songs():
@@ -250,9 +272,31 @@ def show_artist(uuid):
 def search(query):
     results = library.search(query)
     return jsonify({
-        'songs': [{'name': song.name, 'uuid': song.uuid, 'artists': song.artists, 'album': song.album, 'song_art_path': song.song_art_path, 'is_liked': song.is_liked, 'liked_time': song.liked_time, 'file_path': song.file_path} for song in results['songs']],
-        'albums': [{'name': album.name, 'uuid': album.uuid, 'year': album.year, 'album_art_path': album.album_art_path, 'is_liked': album.is_liked, 'liked_time': album.liked_time} for album in results['albums']],
-        'artists': [{'name': artist.name, 'uuid': artist.uuid, 'artist_art_path': artist.artist_art_path, 'is_liked': artist.is_liked, 'liked_time': artist.liked_time} for artist in results['artists']]
+        'songs': [{
+            'name': song.name, 
+            'uuid': song.uuid, 
+            'artists': song.artists, 
+            'album': song.album, 
+            'song_art_path': song.song_art_path, 
+            'is_liked': song.is_liked, 
+            'liked_time': song.liked_time, 
+            'file_path': song.file_path
+        } for song in results['songs']],
+        'albums': [{
+            'name': album.name, 
+            'uuid': album.uuid, 
+            'year': album.year, 
+            'album_art_path': album.album_art_path, 
+            'is_liked': album.is_liked, 
+            'liked_time': album.liked_time
+        } for album in results['albums']],
+        'artists': [{
+            'name': artist.name, 
+            'uuid': artist.uuid, 
+            'artist_art_path': artist.artist_art_path, 
+            'is_liked': artist.is_liked, 
+            'liked_time': artist.liked_time
+        } for artist in results['artists']]
     }), 200
 
 @app.route('/getfile', methods=['GET'])
