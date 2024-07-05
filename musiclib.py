@@ -143,10 +143,10 @@ class MusicLibrary:
                     try:
                         file_path = os.path.join(root, file)
                         id3_tags = self.extract_id3_tags(file_path)
-                        song_name = id3_tags['title']
-                        album_name = id3_tags['album']
-                        artist_names = id3_tags['artists']
-                        album_artist_names = id3_tags.get('album_artists', artist_names)
+                        song_name = id3_tags['title'].strip()
+                        album_name = id3_tags['album'].strip()
+                        artist_names = [name.strip() for name in id3_tags['artists']]
+                        album_artist_names = [name.strip() for name in id3_tags.get('album_artists', artist_names)]
                         track_number = id3_tags['track_number']
                         disc_number = id3_tags['disc_number']
                         year = id3_tags['year']
