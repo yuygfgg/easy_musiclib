@@ -17,7 +17,7 @@ data_file = 'library_data.pkl'
 def load_library():
     global library
     try:
-        if os.path.exists(data_file):
+        if (os.path.exists(data_file)):
             with open(data_file, 'rb') as f:
                 library = pickle.load(f)
                 print("Library loaded from file")
@@ -321,6 +321,20 @@ def get_stream():
         return jsonify({'message': 'Unsupported audio format'}), 400
 
     return send_file(file_path, mimetype=mimetype)
+
+@app.route('/show_relation', methods=['GET'])
+def show_relation():
+    artist_uuid = request.args.get('uuid')
+    try:
+        layer = int(request.args.get('layer'))
+    except (TypeError, ValueError):
+        return jsonify({'message': 'Invalid layer parameter'}), 400
+
+    if not artist_uuid:
+        return jsonify({'message': 'Artist UUID is required'}), 400
+
+    relations_tree = library.show_relation(artist_uuid, layer)
+    return jsonify(relations_tree), 200
 
 if __name__ == '__main__':
     app.run(debug=True, port=5010, host='0.0.0.0')

@@ -84,6 +84,7 @@
             <div class="col-md-9">
                 <h1 id="artist-name">艺术家姓名</h1>
                 <span id="artist-like" class="artist-like">&#9825;</span>
+                <a href="#" onclick="navigateTorelation()">关系图</a>
             </div>
         </div>
         <div class="row">
@@ -114,6 +115,10 @@
         let currentIndex = 0;
         let songs = [];
         let currentSong = null;
+
+        function navigateTorelation() {
+            window.parent.postMessage({ action: 'navigateTo', url: `relation.html?uuid=${artistUUID}` }, '*');
+        }
 
         async function fetchArtistData() {
             try {
