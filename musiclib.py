@@ -91,6 +91,7 @@ class MusicLibrary:
         self.albums = {}
         self.songs = {}
         self.display = MusicLibraryDisplay(self)
+        self.graph = {}
 
     def add_song(self, song):
         self.songs[song.uuid] = song
@@ -200,6 +201,7 @@ class MusicLibrary:
                     except Exception as e:
                         print(f"Error processing file {file_path}: {e}")
                         continue
+        self.graph = self.build_graph()
 
 
 
@@ -294,26 +296,64 @@ class MusicLibrary:
 
     def parse_artists(self, title, album, artists, track_number=1, disc_number=1, album_artists=None, year=None):
         delimiters = ['/', '／', '&', '＆', ' x ', ';', '；', ',', '，', '×', '　', '、']
+        ignore = ['cool&create']
+        ignore_lower = [item.lower() for item in ignore]
         parsed_artists = []
+
         for artist in artists:
-            for delimiter in delimiters:
-                if delimiter in artist:
-                    parsed_artists.extend([a.strip().lower() for a in artist.split(delimiter)])
+            artist_lower = artist.lower()
+            parts = []
+            
+            while artist_lower:
+                for ignored in ignore_lower:
+                    ignored_index = artist_lower.find(ignored)
+                    if ignored_index != -1:
+                        pre_ignored = artist[:ignored_index].strip()
+                        ignored_part = artist[ignored_index:ignored_index + len(ignored)]
+                        post_ignored = artist[ignored_index + len(ignored):].strip()
+
+                        if pre_ignored:
+                            parts.extend(self.split_and_clean(pre_ignored, delimiters))
+                        
+                        parts.append(ignored_part)
+                        artist = post_ignored
+                        artist_lower = artist.lower()
+                        break
+                else:
+                    parts.extend(self.split_and_clean(artist, delimiters))
                     break
-            else:
-                parsed_artists.append(artist.lower())
+            
+            parsed_artists.extend(parts)
 
         if album_artists:
             parsed_album_artists = []
             for artist in album_artists:
-                for delimiter in delimiters:
-                    if delimiter in artist:
-                        parsed_album_artists.extend([a.strip().lower() for a in artist.split(delimiter)])
+                artist_lower = artist.lower()
+                parts = []
+                
+                while artist_lower:
+                    for ignored in ignore_lower:
+                        ignored_index = artist_lower.find(ignored)
+                        if ignored_index != -1:
+                            pre_ignored = artist[:ignored_index].strip()
+                            ignored_part = artist[ignored_index:ignored_index + len(ignored)]
+                            post_ignored = artist[ignored_index + len(ignored):].strip()
+
+                            if pre_ignored:
+                                parts.extend(self.split_and_clean(pre_ignored, delimiters))
+                            
+                            parts.append(ignored_part)
+                            artist = post_ignored
+                            artist_lower = artist.lower()
+                            break
+                    else:
+                        parts.extend(self.split_and_clean(artist, delimiters))
                         break
-                else:
-                    parsed_album_artists.append(artist.lower())
+                
+                parsed_album_artists.extend(parts)
         else:
             parsed_album_artists = parsed_artists
+
         return {
             'title': title,
             'album': album,
@@ -323,6 +363,15 @@ class MusicLibrary:
             'disc_number': disc_number,
             'year': year
         }
+
+    def split_and_clean(self, text, delimiters):
+        temp_artists = [text]
+        for delimiter in delimiters:
+            new_temp_artists = []
+            for temp_artist in temp_artists:
+                new_temp_artists.extend([sub_artist.strip() for sub_artist in temp_artist.split(delimiter) if sub_artist.strip()])
+            temp_artists = new_temp_artists
+        return temp_artists
 
     def extract_year(self, date_string):
         if date_string:
@@ -497,7 +546,7 @@ class MusicLibrary:
         return {"nodes": nodes, "edges": edges}
     
     def show_relation(self, artist_uuid, layer):
-        graph = self.build_graph()
+        graph = self.graph
 
         if artist_uuid == "show_all":
             nodes = []
