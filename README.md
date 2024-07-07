@@ -6,7 +6,10 @@ A music library server, including server, cli client, and webui. Supports muitip
 
 
 
-https://github.com/yuygfgg/easy_musiclib/assets/140488233/76e673ce-6155-4c5d-968c-c2c07c8b16cc
+
+https://github.com/yuygfgg/easy_musiclib/assets/140488233/9d9ad2b4-c3d5-4b4a-9faa-0ac6fe2a8cd8
+
+
 
 
 <img width="1863" alt="截屏2024-07-01 21 07 41" src="https://github.com/yuygfgg/easy_musiclib/assets/140488233/77a8b735-4dba-45d3-83a3-99a6310f1cb2">
