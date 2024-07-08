@@ -264,6 +264,30 @@
     // 播放器控制逻辑
     const audioPlayer = document.getElementById('audio-player');
 
+    if ('mediaSession' in navigator) {
+        function updateMediaSessionMetadata(song) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: song.title,
+                artist: song.artists.map(artist => artist.name).join(', '),
+                album: song.album,
+                artwork: [
+                    { src: song.art || 'default_cover.png', sizes: '96x96', type: 'image/png' },
+                    { src: song.art || 'default_cover.png', sizes: '128x128', type: 'image/png' },
+                    { src: song.art || 'default_cover.png', sizes: '192x192', type: 'image/png' },
+                    { src: song.art || 'default_cover.png', sizes: '256x256', type: 'image/png' },
+                    { src: song.art || 'default_cover.png', sizes: '384x384', type: 'image/png' },
+                    { src: song.art || 'default_cover.png', sizes: '512x512', type: 'image/png' },
+                ]
+            });
+
+            // 设置媒体会话操作处理程序
+            navigator.mediaSession.setActionHandler('play', togglePlayPause);
+            navigator.mediaSession.setActionHandler('pause', togglePlayPause);
+            navigator.mediaSession.setActionHandler('previoustrack', playPreviousSong);
+            navigator.mediaSession.setActionHandler('nexttrack', playNextSong);
+        }
+    }
+
     async function playSong(song) {
         try {
             console.log('Playing song:', song);
@@ -288,6 +312,11 @@
             document.getElementById('playing-album').innerHTML = `<a href="#" onclick="navigateToAlbumPage('${song.albumUUID}')" style="color: #007bff; margin-left: 10px;">${song.album}</a>`;
 
             updateLikeButton(song.isLiked);
+
+            // 更新媒体会话元数据
+            if ('mediaSession' in navigator) {
+                updateMediaSessionMetadata(song);
+            }
 
             audioPlayer.onloadedmetadata = () => {
                 document.getElementById('song-duration').textContent = formatTime(audioPlayer.duration);
@@ -314,6 +343,16 @@
         }
     }
 
+    function playPreviousSong() {
+        const iframe = document.getElementById('content-frame').contentWindow;
+        iframe.postMessage({ action: 'previous' }, '*');
+    }
+
+    function playNextSong() {
+        const iframe = document.getElementById('content-frame').contentWindow;
+        console.log("next song message sent!")
+        iframe.postMessage({ action: 'next' }, '*');
+    }
     function navigateToArtistPage(artistUUID) {
         navigateTo(`artist.html?uuid=${artistUUID}`);
     }
@@ -418,11 +457,8 @@
     });
 
     document.getElementById('play-pause-btn').addEventListener('click', togglePlayPause);
-    document.getElementById('next-btn').addEventListener('click', () => {
-        const iframe = document.getElementById('content-frame').contentWindow;
-        console.log("next song message sent!")
-        iframe.postMessage({ action: 'next' }, '*');
-    });
+    document.getElementById('prev-btn').addEventListener('click', playPreviousSong);
+    document.getElementById('next-btn').addEventListener('click', playNextSong);
     document.getElementById('repeat-btn').addEventListener('click', toggleRepeat);
     document.getElementById('like-btn').addEventListener('click', toggleSongLike);
     document.getElementById('progress-bar').addEventListener('click', setProgress);
