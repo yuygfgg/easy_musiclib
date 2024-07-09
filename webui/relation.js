@@ -1,0 +1,131 @@
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const container = document.getElementById('container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            const svg = d3.select(container).append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .call(d3.zoom().on("zoom", function (event) {
+                    svg.attr("transform", event.transform);
+                }))
+                .append("g");
+
+            let apiBaseUrl = 'http://127.0.0.1:5010';
+            const urlParams = new URLSearchParams(window.location.search);
+            apiBaseUrl = urlParams.get('apibaseUrl');
+            let artistUUID = urlParams.get('uuid');
+
+            function createGraph(data) {
+                svg.selectAll("*").remove();
+
+                const links = data.edges.map(d => ({ source: d.source, target: d.target }));
+                const nodes = data.nodes.map(d => ({ id: d.uuid, name: d.name }));
+
+                const link = svg.append("g")
+                    .attr("stroke", "#999")
+                    .attr("stroke-opacity", 0.6)
+                    .selectAll("line")
+                    .data(links)
+                    .join("line")
+                    .attr("stroke-width", 1.5);
+
+                const node = svg.append("g")
+                    .attr("stroke", "#fff")
+                    .attr("stroke-width", 1.5)
+                    .selectAll("circle")
+                    .data(nodes)
+                    .join("circle")
+                    .attr("r", 5)
+                    .attr("fill", "#0074D9")
+                    .call(drag(simulation));
+
+                const label = svg.append("g")
+                    .selectAll("text")
+                    .data(nodes)
+                    .join("text")
+                    .text(d => d.name)
+                    .attr("font-size", "10px")
+                    .attr("text-anchor", "middle");
+
+                simulation.nodes(nodes).on("tick", () => {
+                    link
+                        .attr("x1", d => d.source.x)
+                        .attr("y1", d => d.source.y)
+                        .attr("x2", d => d.target.x)
+                        .attr("y2", d => d.target.y);
+
+                    node
+                        .attr("cx", d => d.x)
+                        .attr("cy", d => d.y);
+
+                    label
+                        .attr("x", d => d.x)
+                        .attr("y", d => d.y - 10);
+                });
+
+                simulation.force("link").links(links);
+
+                // 停止布局引擎，使用户可以自由拖动节点
+                simulation.alpha(1).restart();
+
+                node.on("click", function (event, d) {
+                    const nodeId = d.id;
+                    node.attr("fill", node => node.id === nodeId ? "#FF4136" : "#0074D9");
+                    link.attr("stroke", link => (link.source.id === nodeId || link.target.id === nodeId) ? "#FF4136" : "#999");
+                });
+
+                node.on("dblclick", function (event, d) {
+                    const nodeId = d.id;
+                    window.parent.postMessage({ action: 'navigateTo', url: `artist.html?uuid=${nodeId}` }, '*');
+                });
+
+                node.on("mouseover", function(event, d) {
+                    d3.select(this).select("text").style("display", "block");
+                });
+
+                node.on("mouseout", function(event, d) {
+                    d3.select(this).select("text").style("display", "none");
+                });
+            }
+
+            function fetchGraphData() {
+                fetch(`${apiBaseUrl}/show_relation?uuid=${artistUUID}&layer=2`)
+                    .then(response => response.json())
+                    .then(data => {
+                        createGraph(data);
+                    });
+            }
+
+            fetchGraphData();
+
+            function drag(simulation) {
+                function dragstarted(event) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    event.subject.fx = event.subject.x;
+                    event.subject.fy = event.subject.y;
+                }
+
+                function dragged(event) {
+                    event.subject.fx = event.x;
+                    event.subject.fy = event.y;
+                }
+
+                function dragended(event) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    event.subject.fx = null;
+                    event.subject.fy = null;
+                }
+
+                return d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended);
+            }
+
+            const simulation = d3.forceSimulation()
+                .force("link", d3.forceLink().id(d => d.id).distance(150))
+                .force("charge", d3.forceManyBody().strength(-300))
+                .force("center", d3.forceCenter(width / 2, height / 2));
+        });
+    
