@@ -336,5 +336,35 @@ def show_relation():
     relations_tree = library.show_relation(artist_uuid, layer)
     return jsonify(relations_tree), 200
 
+@app.route('/merge_artist_by_uuid', methods=['GET'])
+def merge_artist_by_uuid():
+    uuid1 = request.args.get('uuid1')
+    uuid2 = request.args.get('uuid2')
+    
+    if not uuid1 or not uuid2:
+        return jsonify({'message': 'Both uuid1 and uuid2 are required'}), 400
+    
+    library.merge_artist_by_uuid(uuid1, uuid2)
+    save_library()
+    return jsonify({'message': f'Artist {uuid2} merged into {uuid1}'}), 200
+
+@app.route('/merge_artist_by_name', methods=['GET'])
+def merge_artist_by_name():
+    name1 = request.args.get('name1')
+    name2 = request.args.get('name2')
+    
+    if not name1 or not name2:
+        return jsonify({'message': 'Both name1 and name2 are required'}), 400
+
+    library.merge_artist_by_name(name1, name2)
+    save_library()
+    return jsonify({'message': f'Artist {name2} merged into {name1}'}), 200
+
+@app.route('/auto_merge', methods=['GET'])
+def auto_merge():
+    library.auto_merge()
+    save_library()
+    return jsonify({'message': 'Auto merge completed'}), 200
+
 if __name__ == '__main__':
     app.run(debug=True, port=5010, host='0.0.0.0')
