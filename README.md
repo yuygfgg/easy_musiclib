@@ -30,7 +30,7 @@ Webui is currently in **Chinese** only.
 #### Server Setup
 1. Clone the repository
 2. Install all necessary python packages ``` pip install -r requirements.txt ```
-3. install ``` mpv ```
+3. install ``` mpv ``` to play music in cli client
 4. Run api.py ```python api.py ```
 5. modify ``` base_url ``` in ``` client.py ```
 6. run cli client ```python client.py```
