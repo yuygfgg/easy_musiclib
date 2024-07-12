@@ -10,10 +10,11 @@ from datetime import datetime
 import subprocess
 import tempfile
 import shutil
+import opencc
 
 class Artist:
     def __init__(self, name):
-        self.name = name.lower()
+        self.name = name
         self.uuid = str(uuid.uuid4())
         self.is_liked = False
         self.liked_time = None
@@ -60,7 +61,7 @@ class Song:
         self.name = name
         self.uuid = str(uuid.uuid4())
         self.album = {'name': album.name, 'uuid': album.uuid}
-        self.artists = [{'name': artist.name.lower(), 'uuid': artist.uuid} for artist in artists]
+        self.artists = [{'name': artist.name, 'uuid': artist.uuid} for artist in artists]
         self.file_path = file_path
         self.track_number = track_number
         self.disc_number = disc_number
@@ -93,6 +94,15 @@ class MusicLibrary:
         self.songs = {}
         self.display = MusicLibraryDisplay(self)
         self.graph = {}
+        self.cc = opencc.OpenCC('t2s')
+        
+    def normalize_name(self, name):
+        normalized_name = self.cc.convert(name.strip().lower())
+        normalized_name = normalized_name.translate(str.maketrans(
+            "ァィゥェォャュョッーアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンヴヵヶ",
+            "ぁぃぅぇぉゃゅょっーあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんゔゕゖ"
+        ))
+        return normalized_name
 
     def add_song(self, song):
         self.songs[song.uuid] = song
@@ -104,10 +114,9 @@ class MusicLibrary:
         self.artists[artist.uuid] = artist
 
     def find_artist_by_name(self, name):
-        name = name.strip()
-        name = name.lower()
+        normalized_name = self.normalize_name(name)
         for artist in self.artists.values():
-            if artist.name == name:
+            if self.normalize_name(artist.name) == normalized_name:
                 return artist
         return None
 
@@ -162,7 +171,7 @@ class MusicLibrary:
                         for artist_name in album_artist_names:
                             artist = self.find_artist_by_name(artist_name)
                             if not artist:
-                                artist = Artist(artist_name)
+                                artist = Artist(artist_name)  # 保留原始大小写
                                 self.add_artist(artist)
                             album.album_artists.add(artist)
 
@@ -170,7 +179,7 @@ class MusicLibrary:
                         for artist_name in artist_names:
                             artist = self.find_artist_by_name(artist_name)
                             if not artist:
-                                artist = Artist(artist_name)
+                                artist = Artist(artist_name)  # 保留原始大小写
                                 self.add_artist(artist)
                             song_artists.append(artist)
 
@@ -204,8 +213,6 @@ class MusicLibrary:
                         continue
         self.graph = self.build_graph()
         self.auto_merge()
-
-
 
     def extract_id3_tags(self, file_path):
         file_extension = os.path.splitext(file_path)[1].lower()
@@ -299,16 +306,16 @@ class MusicLibrary:
     def parse_artists(self, title, album, artists, track_number=1, disc_number=1, album_artists=None, year=None):
         delimiters = ['/', '／', '&', '＆', ' x ', ';', '；', ',', '，', '×', '　', '、']
         ignore = ['cool&create']
-        ignore_lower = [item.lower() for item in ignore]
+        ignore_normalized = [self.normalize_name(item) for item in ignore]
         parsed_artists = []
 
         for artist in artists:
-            artist_lower = artist.lower()
             parts = []
-            
-            while artist_lower:
-                for ignored in ignore_lower:
-                    ignored_index = artist_lower.find(ignored)
+
+            while artist:
+                artist_normalized = self.normalize_name(artist)
+                for ignored in ignore_normalized:
+                    ignored_index = artist_normalized.find(ignored)
                     if ignored_index != -1:
                         pre_ignored = artist[:ignored_index].strip()
                         ignored_part = artist[ignored_index:ignored_index + len(ignored)]
@@ -316,26 +323,25 @@ class MusicLibrary:
 
                         if pre_ignored:
                             parts.extend(self.split_and_clean(pre_ignored, delimiters))
-                        
+
                         parts.append(ignored_part)
                         artist = post_ignored
-                        artist_lower = artist.lower()
                         break
                 else:
                     parts.extend(self.split_and_clean(artist, delimiters))
                     break
-            
+
             parsed_artists.extend(parts)
 
         if album_artists:
             parsed_album_artists = []
             for artist in album_artists:
-                artist_lower = artist.lower()
                 parts = []
-                
-                while artist_lower:
-                    for ignored in ignore_lower:
-                        ignored_index = artist_lower.find(ignored)
+
+                while artist:
+                    artist_normalized = self.normalize_name(artist)
+                    for ignored in ignore_normalized:
+                        ignored_index = artist_normalized.find(ignored)
                         if ignored_index != -1:
                             pre_ignored = artist[:ignored_index].strip()
                             ignored_part = artist[ignored_index:ignored_index + len(ignored)]
@@ -343,15 +349,14 @@ class MusicLibrary:
 
                             if pre_ignored:
                                 parts.extend(self.split_and_clean(pre_ignored, delimiters))
-                            
+
                             parts.append(ignored_part)
                             artist = post_ignored
-                            artist_lower = artist.lower()
                             break
                     else:
                         parts.extend(self.split_and_clean(artist, delimiters))
                         break
-                
+
                 parsed_album_artists.extend(parts)
         else:
             parsed_album_artists = parsed_artists
@@ -365,7 +370,6 @@ class MusicLibrary:
             'disc_number': disc_number,
             'year': year
         }
-
     def split_and_clean(self, text, delimiters):
         temp_artists = [text]
         for delimiter in delimiters:
@@ -382,7 +386,7 @@ class MusicLibrary:
             print(f"File artist_alias.csv not found in the current directory.")
             return
 
-        with open(file_path, newline='', encoding='utf-8') as csvfile:
+        with open(file_path, newline='', encoding='utf-8-sig') as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
                 print(f"Processing row: {row}")
