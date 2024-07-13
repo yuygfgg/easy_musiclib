@@ -95,6 +95,16 @@ class MusicLibrary:
         self.display = MusicLibraryDisplay(self)
         self.graph = {}
         self.cc = opencc.OpenCC('t2s')
+    
+    def __getstate__(self):
+        # 获取对象的状态，并移除不可序列化的部分
+        state = self.__dict__.copy()
+        state['cc'] = None  # 移除 OpenCC 对象
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.cc = opencc.OpenCC('t2s')
         
     def normalize_name(self, name):
         normalized_name = self.cc.convert(name.strip().lower())
@@ -433,18 +443,22 @@ class MusicLibrary:
 
         # Update songs
         for song in self.songs.values():
+            artist_updated = False
             for artist in song.artists:
                 if artist['uuid'] == uuid2:
                     artist['uuid'] = uuid1
                     artist['name'] = artist1.name
-            if not song.song_art_path and artist1.artist_art_path:
-                song.song_art_path = artist1.artist_art_path
-            if song.album['uuid'] in self.albums:
-                album = self.albums[song.album['uuid']]
-                for album_artist in album.album_artists:
-                    if album_artist.uuid == uuid2:
-                        album_artist.uuid = uuid1
-                        album_artist.name = artist1.name
+                    artist_updated = True
+
+            if artist_updated:
+                if not song.song_art_path and artist1.artist_art_path:
+                    song.song_art_path = artist1.artist_art_path
+                if song.album['uuid'] in self.albums:
+                    album = self.albums[song.album['uuid']]
+                    for album_artist in album.album_artists:
+                        if album_artist.uuid == uuid2:
+                            album_artist.uuid = uuid1
+                            album_artist.name = artist1.name
 
         # Update graph
         if uuid2 in self.graph:
