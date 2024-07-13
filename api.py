@@ -1,39 +1,103 @@
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file
 from musiclib import MusicLibrary, Artist, Album, Song
 import os
 import atexit
-import pickle
 import signal
 from flask_cors import CORS
 from flask_compress import Compress
+import json
+import opencc
+
 
 app = Flask(__name__)
 CORS(app)
 Compress(app)
 
 library = MusicLibrary()
-data_file = 'library_data.pkl'
+data_file = 'library_data.json'
+
+def save_library():
+    """Saves the current state of the music library to a JSON file."""
+    data = {
+        'artists': {uuid: artist.__dict__ for uuid, artist in library.artists.items()},
+        'albums': {uuid: {
+            **album.__dict__,
+            'album_artists': [artist.uuid for artist in album.album_artists],
+            'songs': [song.uuid for song in album.songs]
+        } for uuid, album in library.albums.items()},
+        'songs': {uuid: {
+            **song.__dict__,
+            'album': song.album['uuid'],
+            'artists': [artist['uuid'] for artist in song.artists]
+        } for uuid, song in library.songs.items()},
+        'graph': {k: {kk: {'strength': vv['strength'], 'details': list(vv['details'])} for kk, vv in v.items()} for k, v in library.graph.items()}  # Convert sets to lists for JSON serialization
+    }
+
+    try:
+        with open(data_file, 'w', encoding='utf-8') as file:
+            json.dump(data, file, ensure_ascii=False, indent=4)
+        print("Library saved to file")
+    except Exception as e:
+        print(f"Failed to save library to file: {e}")
 
 def load_library():
+    """Loads the music library state from a JSON file."""
     global library
     try:
-        if (os.path.exists(data_file)):
-            with open(data_file, 'rb') as f:
-                library = pickle.load(f)
-                print("Library loaded from file")
+        if os.path.exists(data_file):
+            with open(data_file, 'r', encoding='utf-8') as file:
+                data = json.load(file)
+
+            library = MusicLibrary()
+            
+            # Restore artists
+            for uuid, artist_data in data['artists'].items():
+                artist = Artist(artist_data['name'])
+                artist.uuid = artist_data['uuid']
+                artist.is_liked = artist_data['is_liked']
+                artist.liked_time = artist_data['liked_time']
+                artist.artist_art_path = artist_data['artist_art_path']
+                library.artists[uuid] = artist
+
+            # Restore albums
+            for uuid, album_data in data['albums'].items():
+                album = Album(album_data['name'])
+                album.uuid = album_data['uuid']
+                album.is_liked = album_data['is_liked']
+                album.liked_time = album_data['liked_time']
+                album.album_art_path = album_data['album_art_path']
+                album.year = album_data['year']
+                album.album_artists = {library.artists[artist_uuid] for artist_uuid in album_data['album_artists']}
+                album.songs = []
+                library.albums[uuid] = album
+
+            # Restore songs
+            for uuid, song_data in data['songs'].items():
+                album = library.albums[song_data['album']]
+                artists = [library.artists[artist_uuid] for artist_uuid in song_data['artists']]
+                song = Song(
+                    song_data['name'], album, artists, song_data['file_path'],
+                    song_data['track_number'], song_data['disc_number'], song_data['year']
+                )
+                song.uuid = song_data['uuid']
+                song.is_liked = song_data['is_liked']
+                song.liked_time = song_data['liked_time']
+                song.song_art_path = song_data['song_art_path']
+                library.songs[uuid] = song
+                album.songs.append(song)
+
+            # Restore graph
+            library.graph = {k: {kk: {'strength': vv['strength'], 'details': set(vv['details'])} for kk, vv in v.items()} for k, v in data.get('graph', {}).items()}
+
+            # Reinitialize OpenCC object
+            library.cc = opencc.OpenCC('t2s')
+
+            print("Library loaded from file")
         else:
             print("No library file found, starting with an empty library")
     except Exception as e:
         print(f"Failed to load library from file: {e}")
-
-def save_library():
-    try:
-        with open(data_file, 'wb') as f:
-            pickle.dump(library, f)
-            print("Library saved to file")
-    except Exception as e:
-        print(f"Failed to save library to file: {e}")
-
+        
 load_library()
 
 atexit.register(save_library)

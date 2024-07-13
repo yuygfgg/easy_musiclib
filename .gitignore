@@ -6,3 +6,4 @@ temp*
 !requirements.txt
 *.csv
 testsplit.py
+library_data.json
