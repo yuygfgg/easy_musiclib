@@ -2,6 +2,7 @@ Flask==3.0.3
 Flask_Compress==1.15
 Flask_Cors==4.0.1
 mutagen==1.46.0
+opencc_python_reimplemented==0.1.7
 Pygments==2.18.0
 rapidfuzz==3.9.3
 Requests==2.32.3
