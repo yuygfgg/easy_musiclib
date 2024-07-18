@@ -229,6 +229,7 @@
         .song-popup .right-section .lyrics {
             color: #ffffff;
             white-space: pre-wrap;
+            overflow-y: auto;
         }
 
         .close-popup {
@@ -307,6 +308,8 @@
             font-weight: bold;
             color: #ff0;
         }
+
+        
     </style>
 </head>
 
@@ -565,6 +568,11 @@
 
             lyricsContainer.innerHTML = lyricsHtml;
             lyricsContainer.scrollTop = lyricsContainer.scrollHeight / lrc.lines.length * line - lyricsContainer.clientHeight / 2;
+
+            const currentLineElement = document.getElementById(`line-${line}`);
+  if (currentLineElement) {
+    currentLineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
         }
 
 

@@ -352,7 +352,7 @@
                 const songArtBlob = await fetchFile(song.song_art_path);
                 let songArtUrl = "default_cover.png";
                 if (songArtBlob) {
-                    songArtUrl = `${apiBaseUrl}/getfile?file_path=${song.song_art_path}`
+                    songArtUrl = `${apiBaseUrl}/getfile?file_path=${encodeURIComponent(song.song_art_path)}`
                 }
 
                 window.parent.postMessage(
