@@ -294,6 +294,19 @@
         .lyrics-selection-popup .lyrics-option:hover {
             background-color: #f0f0f0;
         }
+
+        .lyrics-line {
+            font-size: 16px;
+            color: #fff;
+            text-align: center;
+            margin: 5px 0;
+        }
+
+        .lyrics-line.current {
+            font-size: 20px;
+            font-weight: bold;
+            color: #ff0;
+        }
     </style>
 </head>
 
@@ -468,9 +481,8 @@
 
             lrc = new Lyric({
                 onPlay: function (line, text) {
-                    const originalText = lrc.lines[line].text;
-                    const translatedText = lrc.lines[line].extendedLyrics[0];
-                    document.getElementById("popup-lyrics").innerHTML = `${originalText}<br><span style="color: grey;">${translatedText}</span>`;
+                    updateLyricsDisplay(line, text);
+                    updateMediaSessionLyrics(text);
                 },
                 onSetLyric: function (lines) {
                     console.log(lines);
@@ -483,18 +495,76 @@
             lrc.setLyric(originalLyrics.join('\n'), [translatedLyrics.join('\n')]);
         }
 
+        function updateMediaSessionLyrics(text) {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: document.getElementById("popup-title").textContent,
+                    artist: document.getElementById("popup-artists").textContent,
+                    album: document.getElementById("popup-album").textContent,
+                    artwork: [
+                        { src: document.getElementById("popup-art").src, sizes: '512x512', type: 'image/png' }
+                    ]
+                });
+
+                navigator.mediaSession.setActionHandler('play', () => {
+                    document.getElementById("audio-player").play();
+                });
+
+                navigator.mediaSession.setActionHandler('pause', () => {
+                    document.getElementById("audio-player").pause();
+                });
+
+                navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+                    document.getElementById("audio-player").currentTime -= details.seekOffset || 10;
+                });
+
+                navigator.mediaSession.setActionHandler('seekforward', (details) => {
+                    document.getElementById("audio-player").currentTime += details.seekOffset || 10;
+                });
+
+                navigator.mediaSession.setActionHandler('seekto', (details) => {
+                    document.getElementById("audio-player").currentTime = details.seekTime;
+                });
+            }
+        }
+
         function startLrcSync() {
             const audioPlayer = document.getElementById("audio-player");
             audioPlayer.ontimeupdate = () => {
                 const currentTime = audioPlayer.currentTime * 1000; // 转换为毫秒
-                document.getElementById("playing-time").textContent = formatTime(audioPlayer.currentTime);
-                const progressPercent = (audioPlayer.currentTime / audioPlayer.duration) * 100;
-                document.getElementById("progress").style.width = `${progressPercent}%`;
+                document.getElementById("playing-time").textContent = formatTime(
+                    audioPlayer.currentTime
+                );
+                const progressPercent =
+                    (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                document.getElementById(
+                    "progress"
+                ).style.width = `${progressPercent}%`;
                 lrc.play(currentTime);
             };
             audioPlayer.onpause = () => {
                 lrc.pause();
             };
+        }
+
+        function updateLyricsDisplay(line, text) {
+            const lyricsContainer = document.getElementById("popup-lyrics");
+            const originalText = lrc.lines[line].text;
+            const translatedText = lrc.lines[line].extendedLyrics[0] || '';
+
+            const lyricsHtml = lrc.lines.map((lineObj, index) => {
+                const isCurrent = index === line;
+                const originalLine = lineObj.text;
+                const translatedText = lineObj.extendedLyrics[0] || '';
+                return `
+      <div class="lyrics-line${isCurrent ? ' current' : ''}">
+        ${originalLine}<br><span style="color: grey;">${translatedText}</span>
+      </div>
+    `;
+            }).join('');
+
+            lyricsContainer.innerHTML = lyricsHtml;
+            lyricsContainer.scrollTop = lyricsContainer.scrollHeight / lrc.lines.length * line - lyricsContainer.clientHeight / 2;
         }
 
 
