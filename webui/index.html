@@ -1,608 +1,941 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
+
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>主页面</title>
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/lrc-file-parser@2.4.1/dist/lrc-file-parser.min.js"></script>
     <style>
-      body {
-        background-color: #1e1e1e;
-        color: #ffffff;
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        margin: 0;
-      }
+        body {
+            background-color: #1e1e1e;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+        }
 
-      .navbar {
-        background-color: #2e2e2e;
-        padding: 10px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        color: #fff;
-      }
+        .navbar {
+            background-color: #2e2e2e;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #fff;
+        }
 
-      .navbar a {
-        color: #ffffff;
-        text-decoration: none;
-        font-size: 16px;
-        padding: 10px;
-      }
+        .navbar a {
+            color: #ffffff;
+            text-decoration: none;
+            font-size: 16px;
+            padding: 10px;
+        }
 
-      .navbar a:hover {
-        background-color: #444;
-        border-radius: 5px;
-      }
+        .navbar a:hover {
+            background-color: #444;
+            border-radius: 5px;
+        }
 
-      #content {
-        flex: 1;
-        overflow: auto;
-        padding-bottom: 100px;
-        /* 确保内容不会被播放条挡住 */
-      }
+        #content {
+            flex: 1;
+            overflow: auto;
+            padding-bottom: 100px;
+            /* 确保内容不会被播放条挡住 */
+        }
 
-      .player-bar {
-        position: fixed;
-        bottom: 0;
-        width: 100%;
-        background-color: #2e2e2e;
-        padding: 10px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        color: #fff;
-        z-index: 1000;
-      }
+        .player-bar {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background-color: #2e2e2e;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #fff;
+            z-index: 1000;
+        }
 
-      .player-bar img {
-        width: 50px;
-        height: 50px;
-        margin-right: 10px;
-      }
+        .player-bar img {
+            width: 50px;
+            height: 50px;
+            margin-right: 10px;
+        }
 
-      .player-bar .song-details {
-        display: flex;
-        align-items: center;
-      }
+        .player-bar .song-details {
+            display: flex;
+            align-items: center;
+        }
 
-      .player-bar .song-details .title {
-        font-size: 16px;
-      }
+        .player-bar .song-details .title {
+            font-size: 16px;
+        }
 
-      .player-bar .song-details .artist,
-      .player-bar .song-details .album {
-        font-size: 12px;
-        color: #bbb;
-        cursor: pointer;
-      }
+        .player-bar .song-details .artist,
+        .player-bar .song-details .album {
+            font-size: 12px;
+            color: #bbb;
+            cursor: pointer;
+        }
 
-      .player-controls {
-        display: flex;
-        align-items: center;
-      }
+        .player-controls {
+            display: flex;
+            align-items: center;
+        }
 
-      .player-controls button {
-        background: none;
-        border: none;
-        color: #fff;
-        margin: 0 5px;
-        font-size: 20px;
-        cursor: pointer;
-      }
+        .player-controls button {
+            background: none;
+            border: none;
+            color: #fff;
+            margin: 0 5px;
+            font-size: 20px;
+            cursor: pointer;
+        }
 
-      .progress-container {
-        flex-grow: 1;
-        display: flex;
-        align-items: center;
-        margin: 0 10px;
-      }
+        .progress-container {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            margin: 0 10px;
+        }
 
-      .progress-bar {
-        width: 100%;
-        height: 5px;
-        background: #444;
-        cursor: pointer;
-        position: relative;
-      }
+        .progress-bar {
+            width: 100%;
+            height: 5px;
+            background: #444;
+            cursor: pointer;
+            position: relative;
+        }
 
-      .progress {
-        height: 100%;
-        background: #007bff;
-        width: 0;
-      }
+        .progress {
+            height: 100%;
+            background: #007bff;
+            width: 0;
+        }
 
-      .liked {
-        color: #ff0000;
-        cursor: pointer;
-      }
+        .liked {
+            color: #ff0000;
+            cursor: pointer;
+        }
 
-      .input-container {
-        padding: 20px;
-        background-color: #2e2e2e;
-        display: flex;
-        justify-content: space-around;
-      }
+        .input-container {
+            padding: 20px;
+            background-color: #2e2e2e;
+            display: flex;
+            justify-content: space-around;
+        }
 
-      .input-container input {
-        width: 300px;
-        padding: 10px;
-        border: 1px solid #444;
-        background-color: #1e1e1e;
-        color: #fff;
-      }
+        .input-container input {
+            width: 300px;
+            padding: 10px;
+            border: 1px solid #444;
+            background-color: #1e1e1e;
+            color: #fff;
+        }
 
-      .input-container button {
-        padding: 10px 20px;
-        background-color: #007bff;
-        border: none;
-        color: #fff;
-        cursor: pointer;
-      }
+        .input-container button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+        }
 
-      iframe {
-        width: 100%;
-        height: 100%;
-        border: none;
-      }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
 
-      .search-container {
-        display: flex;
-        align-items: center;
-      }
+        .search-container {
+            display: flex;
+            align-items: center;
+        }
 
-      .search-container input {
-        width: 200px;
-        padding: 5px;
-        margin-right: 5px;
-        background-color: #1e1e1e;
-        color: #fff;
-        border: 1px solid #444;
-      }
+        .search-container input {
+            width: 200px;
+            padding: 5px;
+            margin-right: 5px;
+            background-color: #1e1e1e;
+            color: #fff;
+            border: 1px solid #444;
+        }
 
-      .search-container button {
-        background-color: transparent;
-        border: none;
-        cursor: pointer;
-      }
+        .search-container button {
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+        }
+
+        .song-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 80%;
+            background-color: #000000;
+            color: #000;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            overflow: hidden;
+            display: flex;
+        }
+
+        .song-popup .left-section {
+            flex: 1;
+            background-color: #1e1e1e;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .song-popup .left-section img {
+            width: 80%;
+            height: auto;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .song-popup .left-section .title {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .song-popup .left-section .artist,
+        .song-popup .left-section .album {
+            font-size: 18px;
+            color: #bbb;
+        }
+
+        .song-popup .right-section {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .song-popup .right-section h3 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .song-popup .right-section .lyrics {
+            color: #ffffff;
+            white-space: pre-wrap;
+        }
+
+        .close-popup {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #fff;
+            z-index: 2001;
+        }
+
+        .song-popup .right-section .settings {
+            position: relative;
+            text-align: right;
+        }
+
+        .song-popup .right-section .settings button {
+            background: none;
+            border: none;
+            color: #ffffff;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .lyrics-selection-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60%;
+            height: 60%;
+            background-color: #fff;
+            color: #000;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            z-index: 3000;
+            overflow: auto;
+            padding: 20px;
+        }
+
+        .lyrics-selection-popup .close-popup {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #000;
+        }
+
+        .lyrics-selection-popup .lyrics-option {
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+
+        .lyrics-selection-popup .lyrics-option:hover {
+            background-color: #f0f0f0;
+        }
     </style>
-  </head>
+</head>
 
-  <body>
+<body>
     <div class="navbar">
-      <div class="input-container">
-        <div>
-          <input type="text" id="apiBaseUrl" placeholder="输入api服务地址" />
-          <button onclick="setapiBaseUrl()">设定</button>
+        <div class="input-container">
+            <div>
+                <input type="text" id="apiBaseUrl" placeholder="输入api服务地址" />
+                <button onclick="setapiBaseUrl()">设定</button>
+            </div>
         </div>
-      </div>
-      <div class="search-container">
-        <input
-          type="text"
-          id="search-query"
-          placeholder="搜索..."
-          onkeydown="handleSearchKey(event)"
-        />
-        <button onclick="navigateToSearch()">
-          <img src="search.svg" alt="搜索" style="height: 20px" />
-        </button>
-      </div>
-      <a href="#" onclick="navigateToLiked()">我喜欢的</a>
-      <a href="#" onclick="navigateToAll()">首页</a>
+        <div class="search-container">
+            <input type="text" id="search-query" placeholder="搜索..." onkeydown="handleSearchKey(event)" />
+            <button onclick="navigateToSearch()">
+                <img src="search.svg" alt="搜索" style="height: 20px" />
+            </button>
+        </div>
+        <a href="#" onclick="navigateToLiked()">我喜欢的</a>
+        <a href="#" onclick="navigateToAll()">首页</a>
     </div>
     <div id="content">
-      <iframe id="content-frame" src=""></iframe>
+        <iframe id="content-frame" src=""></iframe>
     </div>
 
     <div class="player-bar" id="player-bar">
-      <div class="song-details">
-        <img id="playing-art" src="" alt="歌曲封面" />
-        <div>
-          <div class="title" id="playing-title">歌曲名称</div>
-          <div class="artist" id="playing-artists"></div>
-          <div class="album" id="playing-album"></div>
+        <div class="song-details">
+            <img id="playing-art" src="" alt="歌曲封面" />
+            <div>
+                <div class="title" id="playing-title">歌曲名称</div>
+                <div class="artist" id="playing-artists"></div>
+                <div class="album" id="playing-album"></div>
+            </div>
         </div>
-      </div>
-      <div class="player-controls">
-        <button id="prev-btn">&#9664;</button>
-        <button id="play-pause-btn">&#9654;</button>
-        <button id="next-btn">&#9654;&#9654;</button>
-        <button id="repeat-btn">&#128257;</button>
-        <button id="like-btn">&#9825;</button>
-      </div>
-      <div class="progress-container">
-        <span id="playing-time">00:00</span>
-        <div class="progress-bar" id="progress-bar">
-          <div class="progress" id="progress"></div>
+        <div class="player-controls">
+            <button id="prev-btn">&#9664;</button>
+            <button id="play-pause-btn">&#9654;</button>
+            <button id="next-btn">&#9654;&#9654;</button>
+            <button id="repeat-btn">&#128257;</button>
+            <button id="like-btn">&#9825;</button>
         </div>
-        <span id="song-duration">00:00</span>
-      </div>
+        <div class="progress-container">
+            <span id="playing-time">00:00</span>
+            <div class="progress-bar" id="progress-bar">
+                <div class="progress" id="progress"></div>
+            </div>
+            <span id="song-duration">00:00</span>
+        </div>
+    </div>
+    <div class="song-popup" id="song-popup">
+        <button class="close-popup" onclick="closeSongPopup()">×</button>
+        <div class="left-section">
+            <img id="popup-art" src="" alt="歌曲封面" />
+            <div class="title" id="popup-title">歌曲名称</div>
+            <div class="artist" id="popup-artists">歌手</div>
+            <div class="album" id="popup-album">专辑</div>
+        </div>
+        <div class="right-section">
+            <div class="settings">
+                <button onclick="openLyricsSelectionPopup()">设置</button>
+            </div>
+            <h3>歌词</h3>
+            <div class="lyrics" id="popup-lyrics">loading...</div>
+        </div>
+    </div>
+
+    <div class="lyrics-selection-popup" id="lyrics-selection-popup">
+        <button class="close-popup" onclick="closeLyricsSelectionPopup()">
+            ×
+        </button>
+        <div id="lyrics-options"></div>
     </div>
 
     <audio id="audio-player" src=""></audio>
-
+    <script src="https://cdn.jsdelivr.net/npm/lrc@2.1.0/lrc.min.js"></script>
     <script>
-      let apiBaseUrl = "http://127.0.0.1:5010";
-      let isPlaying = false;
-      let isRepeating = false;
-      let currentSongUUID = null;
+        let apiBaseUrl = "http://127.0.0.1:5010";
+        let isPlaying = false;
+        let isRepeating = false;
+        let currentSongUUID = null;
+        let lrc;
 
-      if (!window.webkit || !window.webkit.messageHandlers) {
         var storedApiBaseUrl = localStorage.getItem("apiBaseUrl");
         if (storedApiBaseUrl) {
-          apiBaseUrl = storedApiBaseUrl;
+            apiBaseUrl = storedApiBaseUrl;
         }
-      }
 
-      function saveApiBaseUrl(apiBaseUrl) {
-        if (
-          window.webkit &&
-          window.webkit.messageHandlers &&
-          window.webkit.messageHandlers.saveApiBaseUrl
-        ) {
-          window.webkit.messageHandlers.saveApiBaseUrl.postMessage(apiBaseUrl);
-        } else {
-          // Fallback for web server environment
-          console.log("Saving apiBaseUrl:", apiBaseUrl);
-          localStorage.setItem("apiBaseUrl", apiBaseUrl);
-        }
-      }
-
-      function navigateTo(url) {
-        const iframe = document.getElementById("content-frame");
-        const newUrl = `${url}&apibaseUrl=${encodeURIComponent(apiBaseUrl)}`;
-        iframe.src = newUrl;
-      }
-
-      function navigateToForLikedAndAll(url) {
-        const iframe = document.getElementById("content-frame");
-        const newUrl = `${url}?apibaseUrl=${encodeURIComponent(apiBaseUrl)}`;
-        iframe.src = newUrl;
-      }
-
-      function handleSearchKey(event) {
-        if (event.key === "Enter") {
-          navigateToSearch();
-        }
-      }
-
-      function navigateToSearch() {
-        const query = document.getElementById("search-query").value;
-        console.log(
-          `Navigating to search.html?query=${encodeURIComponent(query)}`
-        ); // Log URL for debugging
-        navigateTo(`search.html?query=${encodeURIComponent(query)}`);
-      }
-
-      function setapiBaseUrl() {
-        const query = document.getElementById("apiBaseUrl").value;
-        if (query) {
-          console.log(`set apibaseUrl to ${encodeURIComponent(query)}`); // Log URL for debugging
-          apiBaseUrl = query;
-        } else {
-          alert("请输入apibaseurl");
-        }
-        saveApiBaseUrl(apiBaseUrl);
-      }
-
-      function navigateToLiked() {
-        console.log("Navigating to liked.html"); // Log navigation for debugging
-        navigateToForLikedAndAll("liked.html");
-      }
-
-      function navigateToAll() {
-        console.log("Navigating to all.html"); // Log navigation for debugging
-        navigateToForLikedAndAll("all.html");
-      }
-
-      // 播放器控制逻辑
-      const audioPlayer = document.getElementById("audio-player");
-
-      if ("mediaSession" in navigator) {
-        function updateMediaSessionMetadata(song) {
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title: song.title,
-            artist: song.artists.map((artist) => artist.name).join(", "),
-            album: song.album,
-            artwork: [
-              {
-                src: song.art || "default_cover.png",
-                sizes: "96x96",
-                type: "image/png",
-              },
-              {
-                src: song.art || "default_cover.png",
-                sizes: "128x128",
-                type: "image/png",
-              },
-              {
-                src: song.art || "default_cover.png",
-                sizes: "192x192",
-                type: "image/png",
-              },
-              {
-                src: song.art || "default_cover.png",
-                sizes: "256x256",
-                type: "image/png",
-              },
-              {
-                src: song.art || "default_cover.png",
-                sizes: "384x384",
-                type: "image/png",
-              },
-              {
-                src: song.art || "default_cover.png",
-                sizes: "512x512",
-                type: "image/png",
-              },
-            ],
-          });
-
-          // 设置媒体会话操作处理程序
-          navigator.mediaSession.setActionHandler("play", togglePlayPause);
-          navigator.mediaSession.setActionHandler("pause", togglePlayPause);
-          navigator.mediaSession.setActionHandler(
-            "previoustrack",
-            playPreviousSong
-          );
-          navigator.mediaSession.setActionHandler("nexttrack", playNextSong);
-          navigator.mediaSession.setActionHandler("seekto", (details) => {
-            if (details.fastSeek && "fastSeek" in audioPlayer) {
-              audioPlayer.fastSeek(details.seekTime);
-              return;
+        function saveApiBaseUrl(apiBaseUrl) {
+            if (
+                window.webkit &&
+                window.webkit.messageHandlers &&
+                window.webkit.messageHandlers.saveApiBaseUrl
+            ) {
+                window.webkit.messageHandlers.saveApiBaseUrl.postMessage(apiBaseUrl);
+            } else {
+                // Fallback for web server environment
+                console.log("Saving apiBaseUrl:", apiBaseUrl);
+                localStorage.setItem("apiBaseUrl", apiBaseUrl);
             }
-            audioPlayer.currentTime = details.seekTime;
-          });
-          navigator.mediaSession.setActionHandler("seekbackward", (details) => {
-            audioPlayer.currentTime = Math.max(
-              audioPlayer.currentTime - (details.seekOffset || 10),
-              0
-            );
-          });
-          navigator.mediaSession.setActionHandler("seekforward", (details) => {
-            audioPlayer.currentTime = Math.min(
-              audioPlayer.currentTime + (details.seekOffset || 10),
-              audioPlayer.duration
-            );
-          });
         }
-      }
 
-      async function playSong(song) {
-        try {
-          console.log("Playing song:", song);
+        function navigateTo(url) {
+            const iframe = document.getElementById("content-frame");
+            const newUrl = `${url}&apibaseUrl=${encodeURIComponent(apiBaseUrl)}`;
+            iframe.src = newUrl;
+        }
 
-          // 暂停并重置当前音频
-          audioPlayer.pause();
-          audioPlayer.src = ""; // 清空当前 src
-          audioPlayer.load(); // 重置音频元素
+        function navigateToForLikedAndAll(url) {
+            const iframe = document.getElementById("content-frame");
+            const newUrl = `${url}?apibaseUrl=${encodeURIComponent(apiBaseUrl)}`;
+            iframe.src = newUrl;
+        }
 
-          const streamUrl = `${apiBaseUrl}/getStream?file_path=${encodeURIComponent(
-            song.filePath
-          )}`;
-          audioPlayer.src = streamUrl;
-          console.log(streamUrl);
-          audioPlayer.play();
-          isPlaying = true;
-          updatePlayPauseButton();
+        function handleSearchKey(event) {
+            if (event.key === "Enter") {
+                navigateToSearch();
+            }
+        }
 
-          document.getElementById("playing-art").src =
-            song.art || "default_cover.png";
-          document.getElementById("playing-title").textContent = song.title;
+        function navigateToSearch() {
+            const query = document.getElementById("search-query").value;
+            console.log(
+                `Navigating to search.html?query=${encodeURIComponent(query)}`
+            ); // Log URL for debugging
+            navigateTo(`search.html?query=${encodeURIComponent(query)}`);
+        }
 
-          const artistsHtml = song.artists
-            .map(
-              (artist) =>
-                `<a href="#" onclick="navigateToArtistPage('${artist.uuid}')" style="color: #007bff; margin-right: 5px;">${artist.name}</a>`
+        function setapiBaseUrl() {
+            const query = document.getElementById("apiBaseUrl").value;
+            if (query) {
+                console.log(`set apibaseUrl to ${encodeURIComponent(query)}`); // Log URL for debugging
+                apiBaseUrl = query;
+            } else {
+                alert("请输入apibaseurl");
+            }
+            saveApiBaseUrl(apiBaseUrl);
+        }
+
+        function navigateToLiked() {
+            console.log("Navigating to liked.html"); // Log navigation for debugging
+            navigateToForLikedAndAll("liked.html");
+        }
+
+        function navigateToAll() {
+            console.log("Navigating to all.html"); // Log navigation for debugging
+            navigateToForLikedAndAll("all.html");
+        }
+
+        document.getElementById("playing-art").addEventListener("click", () => {
+            toggleSongPopup();
+        });
+
+        function parseLrc(lyrics) {
+            const lines = lyrics.split('\n');
+            const originalLyrics = [];
+            const translatedLyrics = [];
+
+            lines.forEach(line => {
+                if (line.trim() === '') return;
+
+                const match = line.match(/^\[(\d{2}:\d{2}\.\d{2,3})\](.*)$/);
+                if (match) {
+                    const time = match[1];
+                    const text = match[2];
+
+                    if (!originalLyrics.length || originalLyrics[originalLyrics.length - 1].time !== time) {
+                        originalLyrics.push({ time, text });
+                        console.log("original line added");
+                    } else {
+                        translatedLyrics.push({ time, text });
+                        console.log("translate line added");
+                    }
+                }
+            });
+
+            const originalLyricsStr = originalLyrics.map(line => `[${line.time}]${line.text}`).join('\n');
+            const translatedLyricsStr = translatedLyrics.map(line => `[${line.time}]${line.text}`).join('\n');
+
+            lrc = new Lyric({
+                onPlay: function (line, text) {
+                    document.getElementById("popup-lyrics").textContent = text;
+                },
+                onSetLyric: function (lines) {
+                    console.log(lines);
+                },
+                offset: 150,
+                playbackRate: 1,
+                isRemoveBlankLine: true
+            });
+
+            lrc.setLyric(originalLyricsStr, [translatedLyricsStr]);
+        }
+
+        function startLrcSync() {
+            const audioPlayer = document.getElementById("audio-player");
+            audioPlayer.ontimeupdate = () => {
+                const currentTime = audioPlayer.currentTime * 1000; // 转换为毫秒
+                document.getElementById("playing-time").textContent = formatTime(audioPlayer.currentTime);
+                const progressPercent = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                document.getElementById( "progress").style.width = `${progressPercent}%`;
+                lrc.play(currentTime);
+            };
+            audioPlayer.onpause = () => {
+                lrc.pause();
+            };
+        }
+
+
+        function toggleSongPopup() {
+            const popup = document.getElementById("song-popup");
+            if (popup.style.display === "flex") {
+                closeSongPopup();
+            } else {
+                openSongPopup();
+            }
+        }
+
+        function openSongPopup() {
+            document.getElementById("popup-art").src =
+                document.getElementById("playing-art").src;
+            document.getElementById("popup-title").textContent =
+                document.getElementById("playing-title").textContent;
+            document.getElementById("popup-artists").innerHTML =
+                document.getElementById("playing-artists").innerHTML;
+            document.getElementById("popup-album").innerHTML =
+                document.getElementById("playing-album").innerHTML;
+            document.getElementById("popup-lyrics").textContent = "loading...";
+            fetchLyricsAuto();
+            document.getElementById("song-popup").style.display = "flex";
+        }
+        function openLyricsSelectionPopup() {
+            document.getElementById("lyrics-selection-popup").style.display =
+                "block";
+            fetchLyricsOptions();
+        }
+
+        function closeLyricsSelectionPopup() {
+            document.getElementById("lyrics-selection-popup").style.display =
+                "none";
+        }
+
+        function fetchLyricsAuto() {
+            // 获取当前播放的歌曲信息
+            const title = document.getElementById("popup-title").textContent;
+            const artist = document.getElementById("popup-artists").textContent;
+            const album = document.getElementById("popup-album").textContent;
+            const duration = audioPlayer.duration;
+
+            // 调用后端API获取歌词选项
+            fetch(
+                `${apiBaseUrl}/lyrics?title=${encodeURIComponent(
+                    title
+                )}&artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(
+                    album
+                )}&duration=${duration}`
             )
-            .join("");
-          document.getElementById("playing-artists").innerHTML = artistsHtml;
-          document.getElementById(
-            "playing-album"
-          ).innerHTML = `<a href="#" onclick="navigateToAlbumPage('${song.albumUUID}')" style="color: #007bff; margin-left: 10px;">${song.album}</a>`;
+                .then((response) => response.json())
+                .then((data) => {
+                    const lyricsOptionsContainer =
+                        document.getElementById("lyrics-options");
+                    lyricsOptionsContainer.innerHTML = "";
 
-          updateLikeButton(song.isLiked);
-
-          // 更新媒体会话元数据
-          if ("mediaSession" in navigator) {
-            updateMediaSessionMetadata(song);
-          }
-
-          audioPlayer.onloadedmetadata = () => {
-            document.getElementById("song-duration").textContent = formatTime(
-              audioPlayer.duration
-            );
-          };
-
-          audioPlayer.ontimeupdate = () => {
-            document.getElementById("playing-time").textContent = formatTime(
-              audioPlayer.currentTime
-            );
-            const progressPercent =
-              (audioPlayer.currentTime / audioPlayer.duration) * 100;
-            document.getElementById(
-              "progress"
-            ).style.width = `${progressPercent}%`;
-          };
-
-          audioPlayer.onended = () => {
-            if (isRepeating) {
-              audioPlayer.currentTime = 0;
-              audioPlayer.play();
-            } else {
-              playNextSong();
-            }
-          };
-
-          currentSongUUID = song.uuid;
-        } catch (error) {
-          console.error("Error:", error);
-        }
-      }
-
-      function playPreviousSong() {
-        const iframe = document.getElementById("content-frame").contentWindow;
-        iframe.postMessage({ action: "previous" }, "*");
-      }
-
-      function playNextSong() {
-        const iframe = document.getElementById("content-frame").contentWindow;
-        console.log("next song message sent!");
-        iframe.postMessage({ action: "next" }, "*");
-      }
-      function navigateToArtistPage(artistUUID) {
-        navigateTo(`artist.html?uuid=${artistUUID}`);
-      }
-
-      function navigateToAlbumPage(albumUUID) {
-        navigateTo(`album.html?uuid=${albumUUID}`);
-      }
-
-      function updatePlayPauseButton() {
-        const playPauseBtn = document.getElementById("play-pause-btn");
-        playPauseBtn.innerHTML = isPlaying ? "&#10074;&#10074;" : "&#9654;";
-      }
-
-      function togglePlayPause() {
-        if (isPlaying) {
-          audioPlayer.pause();
-          isPlaying = false;
-        } else {
-          audioPlayer.play();
-          isPlaying = true;
-        }
-        updatePlayPauseButton();
-      }
-
-      function toggleRepeat() {
-        isRepeating = !isRepeating;
-        const repeatBtn = document.getElementById("repeat-btn");
-        repeatBtn.classList.toggle("active"); // Toggle active class for visual feedback
-        repeatBtn.innerHTML = isRepeating ? "&#128258;" : "&#128257;";
-      }
-
-      function formatTime(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${minutes}:${secs < 10 ? "0" : ""}${secs}`;
-      }
-
-      function setProgress(e) {
-        const progressBar = document.getElementById("progress-bar");
-        const width = progressBar.clientWidth;
-        const clickX = e.offsetX;
-        const duration = audioPlayer.duration;
-
-        audioPlayer.currentTime = (clickX / width) * duration;
-      }
-
-      function updateLikeButton(isLiked) {
-        const likeBtn = document.getElementById("like-btn");
-        if (isLiked) {
-          likeBtn.innerHTML = "&#9829;";
-          likeBtn.classList.add("text-danger");
-        } else {
-          likeBtn.innerHTML = "&#9825;";
-          likeBtn.classList.remove("text-danger");
-        }
-      }
-
-      async function toggleSongLike() {
-        if (!currentSongUUID) {
-          console.error("Error: No song is currently being played.");
-          return;
+                    // 检查是否有返回结果
+                    if (data.length > 0) {
+                        // 默认显示第一个歌词
+                        selectLyrics(data[0].lyrics);
+                    } else {
+                        document.getElementById("popup-lyrics").textContent =
+                            "未找到歌词"; // 如果没有找到歌词，显示默认消息
+                    }
+                });
         }
 
-        try {
-          const response = await fetch(
-            `${apiBaseUrl}/show_song/${currentSongUUID}`
-          );
-          if (response.ok) {
-            const song = await response.json();
-            let likeResponse;
-            if (song.is_liked) {
-              likeResponse = await fetch(
-                `${apiBaseUrl}/unlike_song/${currentSongUUID}`
-              );
-            } else {
-              likeResponse = await fetch(
-                `${apiBaseUrl}/like_song/${currentSongUUID}`
-              );
-            }
+        function fetchLyricsOptions() {
+            // 获取当前播放的歌曲信息
+            const title = document.getElementById("popup-title").textContent;
+            const artist = document.getElementById("popup-artists").textContent;
+            const album = document.getElementById("popup-album").textContent;
+            const duration = audioPlayer.duration;
 
-            if (likeResponse.ok) {
-              const updatedSongResponse = await fetch(
-                `${apiBaseUrl}/show_song/${currentSongUUID}`
-              );
-              if (updatedSongResponse.ok) {
-                const updatedSong = await updatedSongResponse.json();
-                updateLikeButton(updatedSong.is_liked);
-                // 发送消息给 iframe 更新列表中的爱心图标
-                const iframe =
-                  document.getElementById("content-frame").contentWindow;
-                iframe.postMessage(
-                  {
-                    action: "updateSongLike",
-                    uuid: currentSongUUID,
-                    isLiked: updatedSong.is_liked,
-                  },
-                  "*"
+            // 调用后端API获取歌词选项
+            fetch(
+                `${apiBaseUrl}/lyrics?title=${encodeURIComponent(
+                    title
+                )}&artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(
+                    album
+                )}&duration=${duration}`
+            )
+                .then((response) => response.json())
+                .then((data) => {
+                    const lyricsOptionsContainer =
+                        document.getElementById("lyrics-options");
+                    lyricsOptionsContainer.innerHTML = "";
+
+                    // 检查是否有返回结果
+                    if (data.length > 0) {
+                        // 默认显示第一个歌词
+                        selectLyrics(data[0].lyrics);
+
+                        // 显示歌词选项
+                        data.forEach((option) => {
+                            const optionDiv = document.createElement("div");
+                            optionDiv.classList.add("lyrics-option");
+                            optionDiv.innerHTML = `
+                  <div><strong>${option.title}</strong> [${option.artist}]</div>
+                  <pre>${option.lyrics}</pre>
+                `;
+                            optionDiv.onclick = () => {
+                                selectLyrics(option.lyrics);
+                                closeLyricsSelectionPopup();
+                            };
+                            lyricsOptionsContainer.appendChild(optionDiv);
+                        });
+                    } else {
+                        document.getElementById("popup-lyrics").textContent =
+                            "未找到歌词"; // 如果没有找到歌词，显示默认消息
+                    }
+                });
+        }
+
+        function selectLyrics(lyrics) {
+            parseLrc(lyrics);
+            startLrcSync();
+        }
+        function closeSongPopup() {
+            document.getElementById("song-popup").style.display = "none";
+        }
+        // 播放器控制逻辑
+        const audioPlayer = document.getElementById("audio-player");
+
+        if ("mediaSession" in navigator) {
+            function updateMediaSessionMetadata(song) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: song.title,
+                    artist: song.artists.map((artist) => artist.name).join(", "),
+                    album: song.album,
+                    artwork: [
+                        {
+                            src: song.art || "default_cover.png",
+                            sizes: "96x96",
+                            type: "image/png",
+                        },
+                        {
+                            src: song.art || "default_cover.png",
+                            sizes: "128x128",
+                            type: "image/png",
+                        },
+                        {
+                            src: song.art || "default_cover.png",
+                            sizes: "192x192",
+                            type: "image/png",
+                        },
+                        {
+                            src: song.art || "default_cover.png",
+                            sizes: "256x256",
+                            type: "image/png",
+                        },
+                        {
+                            src: song.art || "default_cover.png",
+                            sizes: "384x384",
+                            type: "image/png",
+                        },
+                        {
+                            src: song.art || "default_cover.png",
+                            sizes: "512x512",
+                            type: "image/png",
+                        },
+                    ],
+                });
+
+                // 设置媒体会话操作处理程序
+                navigator.mediaSession.setActionHandler("play", togglePlayPause);
+                navigator.mediaSession.setActionHandler("pause", togglePlayPause);
+                navigator.mediaSession.setActionHandler(
+                    "previoustrack",
+                    playPreviousSong
                 );
-              }
-            } else {
-              console.error(
-                "Failed to toggle like status:",
-                likeResponse.statusText
-              );
+                navigator.mediaSession.setActionHandler("nexttrack", playNextSong);
+                navigator.mediaSession.setActionHandler("seekto", (details) => {
+                    if (details.fastSeek && "fastSeek" in audioPlayer) {
+                        audioPlayer.fastSeek(details.seekTime);
+                        return;
+                    }
+                    audioPlayer.currentTime = details.seekTime;
+                });
+                navigator.mediaSession.setActionHandler("seekbackward", (details) => {
+                    audioPlayer.currentTime = Math.max(
+                        audioPlayer.currentTime - (details.seekOffset || 10),
+                        0
+                    );
+                });
+                navigator.mediaSession.setActionHandler("seekforward", (details) => {
+                    audioPlayer.currentTime = Math.min(
+                        audioPlayer.currentTime + (details.seekOffset || 10),
+                        audioPlayer.duration
+                    );
+                });
             }
-          } else {
-            console.error("Failed to fetch song details:", response.statusText);
-          }
-        } catch (error) {
-          console.error("Error:", error);
         }
-      }
-      function playNextSong() {
-        const iframe = document.getElementById("content-frame").contentWindow;
-        iframe.postMessage({ action: "next" }, "*");
-      }
 
-      document.getElementById("prev-btn").addEventListener("click", () => {
-        const iframe = document.getElementById("content-frame").contentWindow;
-        iframe.postMessage({ action: "previous" }, "*");
-      });
+        async function playSong(song) {
+            try {
+                console.log("Playing song:", song);
 
-      document
-        .getElementById("play-pause-btn")
-        .addEventListener("click", togglePlayPause);
-      document
-        .getElementById("prev-btn")
-        .addEventListener("click", playPreviousSong);
-      document
-        .getElementById("next-btn")
-        .addEventListener("click", playNextSong);
-      document
-        .getElementById("repeat-btn")
-        .addEventListener("click", toggleRepeat);
-      document
-        .getElementById("like-btn")
-        .addEventListener("click", toggleSongLike);
-      document
-        .getElementById("progress-bar")
-        .addEventListener("click", setProgress);
+                // 暂停并重置当前音频
+                audioPlayer.pause();
+                audioPlayer.src = ""; // 清空当前 src
+                audioPlayer.load(); // 重置音频元素
 
-      // 接收来自 iframe 的消息
-      window.addEventListener("message", (event) => {
-        if (event.data.action === "playSong") {
-          playSong(event.data.song);
-        } else if (event.data.action === "navigateTo") {
-          navigateTo(event.data.url);
+                const streamUrl = `${apiBaseUrl}/getStream?file_path=${encodeURIComponent(
+                    song.filePath
+                )}`;
+                audioPlayer.src = streamUrl;
+                console.log(streamUrl);
+                audioPlayer.play();
+                isPlaying = true;
+                updatePlayPauseButton();
+
+                document.getElementById("playing-art").src =
+                    song.art || "default_cover.png";
+                document.getElementById("playing-title").textContent = song.title;
+
+                const artistsHtml = song.artists
+                    .map(
+                        (artist) =>
+                            `<a href="#" onclick="navigateToArtistPage('${artist.uuid}')" style="color: #007bff; margin-right: 5px;">${artist.name}</a>`
+                    )
+                    .join("");
+                document.getElementById("playing-artists").innerHTML = artistsHtml;
+                document.getElementById(
+                    "playing-album"
+                ).innerHTML = `<a href="#" onclick="navigateToAlbumPage('${song.albumUUID}')" style="color: #007bff; margin-left: 10px;">${song.album}</a>`;
+
+                updateLikeButton(song.isLiked);
+
+                document.getElementById("popup-art").src =
+                    song.art || "default_cover.png";
+                document.getElementById("popup-title").textContent = song.title;
+                document.getElementById("popup-artists").innerHTML = song.artists
+                    .map((artist) => artist.name)
+                    .join(", ");
+                document.getElementById("popup-album").innerHTML = song.album;
+                document.getElementById("popup-lyrics").textContent = "loading...";
+
+                // 更新媒体会话元数据
+                if ("mediaSession" in navigator) {
+                    updateMediaSessionMetadata(song);
+                }
+
+                audioPlayer.onloadedmetadata = () => {
+                    document.getElementById("song-duration").textContent = formatTime(
+                        audioPlayer.duration
+                    );
+                };
+
+                audioPlayer.ontimeupdate = () => {
+                    document.getElementById("playing-time").textContent = formatTime(
+                        audioPlayer.currentTime
+                    );
+                    const progressPercent =
+                        (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                    document.getElementById(
+                        "progress"
+                    ).style.width = `${progressPercent}%`;
+                };
+
+                audioPlayer.onended = () => {
+                    if (isRepeating) {
+                        audioPlayer.currentTime = 0;
+                        audioPlayer.play();
+                    } else {
+                        playNextSong();
+                    }
+                };
+
+                currentSongUUID = song.uuid;
+            } catch (error) {
+                console.error("Error:", error);
+            }
         }
-      });
+
+        function playPreviousSong() {
+            const iframe = document.getElementById("content-frame").contentWindow;
+            iframe.postMessage({ action: "previous" }, "*");
+        }
+
+        function playNextSong() {
+            const iframe = document.getElementById("content-frame").contentWindow;
+            console.log("next song message sent!");
+            iframe.postMessage({ action: "next" }, "*");
+        }
+        function navigateToArtistPage(artistUUID) {
+            navigateTo(`artist.html?uuid=${artistUUID}`);
+        }
+
+        function navigateToAlbumPage(albumUUID) {
+            navigateTo(`album.html?uuid=${albumUUID}`);
+        }
+
+        function updatePlayPauseButton() {
+            const playPauseBtn = document.getElementById("play-pause-btn");
+            playPauseBtn.innerHTML = isPlaying ? "&#10074;&#10074;" : "&#9654;";
+        }
+
+        function togglePlayPause() {
+            if (isPlaying) {
+                audioPlayer.pause();
+                isPlaying = false;
+            } else {
+                audioPlayer.play();
+                isPlaying = true;
+            }
+            updatePlayPauseButton();
+        }
+
+        function toggleRepeat() {
+            isRepeating = !isRepeating;
+            const repeatBtn = document.getElementById("repeat-btn");
+            repeatBtn.classList.toggle("active"); // Toggle active class for visual feedback
+            repeatBtn.innerHTML = isRepeating ? "&#128258;" : "&#128257;";
+        }
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${minutes}:${secs < 10 ? "0" : ""}${secs}`;
+        }
+
+        function setProgress(e) {
+            const progressBar = document.getElementById("progress-bar");
+            const width = progressBar.clientWidth;
+            const clickX = e.offsetX;
+            const duration = audioPlayer.duration;
+
+            audioPlayer.currentTime = (clickX / width) * duration;
+        }
+
+        function updateLikeButton(isLiked) {
+            const likeBtn = document.getElementById("like-btn");
+            if (isLiked) {
+                likeBtn.innerHTML = "&#9829;";
+                likeBtn.classList.add("text-danger");
+            } else {
+                likeBtn.innerHTML = "&#9825;";
+                likeBtn.classList.remove("text-danger");
+            }
+        }
+
+        async function toggleSongLike() {
+            if (!currentSongUUID) {
+                console.error("Error: No song is currently being played.");
+                return;
+            }
+
+            try {
+                const response = await fetch(
+                    `${apiBaseUrl}/show_song/${currentSongUUID}`
+                );
+                if (response.ok) {
+                    const song = await response.json();
+                    let likeResponse;
+                    if (song.is_liked) {
+                        likeResponse = await fetch(
+                            `${apiBaseUrl}/unlike_song/${currentSongUUID}`
+                        );
+                    } else {
+                        likeResponse = await fetch(
+                            `${apiBaseUrl}/like_song/${currentSongUUID}`
+                        );
+                    }
+
+                    if (likeResponse.ok) {
+                        const updatedSongResponse = await fetch(
+                            `${apiBaseUrl}/show_song/${currentSongUUID}`
+                        );
+                        if (updatedSongResponse.ok) {
+                            const updatedSong = await updatedSongResponse.json();
+                            updateLikeButton(updatedSong.is_liked);
+                            // 发送消息给 iframe 更新列表中的爱心图标
+                            const iframe =
+                                document.getElementById("content-frame").contentWindow;
+                            iframe.postMessage(
+                                {
+                                    action: "updateSongLike",
+                                    uuid: currentSongUUID,
+                                    isLiked: updatedSong.is_liked,
+                                },
+                                "*"
+                            );
+                        }
+                    } else {
+                        console.error(
+                            "Failed to toggle like status:",
+                            likeResponse.statusText
+                        );
+                    }
+                } else {
+                    console.error("Failed to fetch song details:", response.statusText);
+                }
+            } catch (error) {
+                console.error("Error:", error);
+            }
+        }
+        function playNextSong() {
+            const iframe = document.getElementById("content-frame").contentWindow;
+            iframe.postMessage({ action: "next" }, "*");
+        }
+
+        document.getElementById("prev-btn").addEventListener("click", () => {
+            const iframe = document.getElementById("content-frame").contentWindow;
+            iframe.postMessage({ action: "previous" }, "*");
+        });
+
+        document
+            .getElementById("play-pause-btn")
+            .addEventListener("click", togglePlayPause);
+        document
+            .getElementById("prev-btn")
+            .addEventListener("click", playPreviousSong);
+        document
+            .getElementById("next-btn")
+            .addEventListener("click", playNextSong);
+        document
+            .getElementById("repeat-btn")
+            .addEventListener("click", toggleRepeat);
+        document
+            .getElementById("like-btn")
+            .addEventListener("click", toggleSongLike);
+        document
+            .getElementById("progress-bar")
+            .addEventListener("click", setProgress);
+
+        // 接收来自 iframe 的消息
+        window.addEventListener("message", (event) => {
+            if (event.data.action === "playSong") {
+                playSong(event.data.song);
+            } else if (event.data.action === "navigateTo") {
+                navigateTo(event.data.url);
+            }
+        });
+        closeLyricsSelectionPopup();
+        closeSongPopup();
     </script>
-  </body>
+</body>
+
 </html>

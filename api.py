@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, Response, request, jsonify, send_file
 from musiclib import MusicLibrary, Artist, Album, Song
 import os
 from flask_cors import CORS
@@ -7,6 +7,7 @@ import json
 import opencc
 import datetime
 import logging
+import lrc
 
 
 app = Flask(__name__)
@@ -177,7 +178,6 @@ def load_library():
         logger.error(f"Failed to load library from file: {e}")
         raise
 
-load_library()
 
 @app.route('/add_song', methods=['GET'])
 def add_song():
@@ -500,5 +500,32 @@ def auto_merge():
     save_library()
     return jsonify({'message': 'Auto merge completed'}), 200
 
+@app.route('/lyrics', methods=['GET'])
+def lyrics():
+    title = request.args.get('title')
+    artist = request.args.get('artist')
+    album = request.args.get('album')
+    duration = request.args.get('duration', type=float, default=0)
+
+    local_lyrics = lrc.check_local_lyrics(title)
+    if local_lyrics:
+        response = jsonify([{
+            "title": title,
+            "artist": artist,
+            "lyrics": local_lyrics
+        }])
+        response.headers['Content-Type'] = 'application/json'
+        return response
+
+    aligned_lyrics = lrc.get_aligned_lyrics(title, artist, album, duration)
+    if aligned_lyrics:
+        response = jsonify(aligned_lyrics)
+        response.headers['Content-Type'] = 'application/json'
+        return response
+    else:
+        response = Response('', status=404)
+        response.headers['Content-Type'] = 'application/json'
+        return response
 if __name__ == '__main__':
+    load_library()
     app.run(debug=True, port=5010, host='0.0.0.0')
