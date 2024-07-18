@@ -511,26 +511,6 @@
                         { src: document.getElementById("popup-art").src, sizes: '512x512', type: 'image/png' }
                     ]
                 });
-
-                navigator.mediaSession.setActionHandler('play', () => {
-                    document.getElementById("audio-player").play();
-                });
-
-                navigator.mediaSession.setActionHandler('pause', () => {
-                    document.getElementById("audio-player").pause();
-                });
-
-                navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-                    document.getElementById("audio-player").currentTime -= details.seekOffset || 10;
-                });
-
-                navigator.mediaSession.setActionHandler('seekforward', (details) => {
-                    document.getElementById("audio-player").currentTime += details.seekOffset || 10;
-                });
-
-                navigator.mediaSession.setActionHandler('seekto', (details) => {
-                    document.getElementById("audio-player").currentTime = details.seekTime;
-                });
             }
         }
 
