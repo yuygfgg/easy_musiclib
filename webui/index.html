@@ -459,21 +459,18 @@
                     const text = match[2];
 
                     if (!originalLyrics.length || originalLyrics[originalLyrics.length - 1].time !== time) {
-                        originalLyrics.push({ time, text });
-                        console.log("original line added");
+                        originalLyrics.push(`[${time}]${text}`);
                     } else {
-                        translatedLyrics.push({ time, text });
-                        console.log("translate line added");
+                        translatedLyrics.push(`[${time}]${text}`);
                     }
                 }
             });
 
-            const originalLyricsStr = originalLyrics.map(line => `[${line.time}]${line.text}`).join('\n');
-            const translatedLyricsStr = translatedLyrics.map(line => `[${line.time}]${line.text}`).join('\n');
-
             lrc = new Lyric({
                 onPlay: function (line, text) {
-                    document.getElementById("popup-lyrics").textContent = text;
+                    const originalText = lrc.lines[line].text;
+                    const translatedText = lrc.lines[line].extendedLyrics[0];
+                    document.getElementById("popup-lyrics").innerHTML = `${originalText}<br><span style="color: grey;">${translatedText}</span>`;
                 },
                 onSetLyric: function (lines) {
                     console.log(lines);
@@ -483,7 +480,7 @@
                 isRemoveBlankLine: true
             });
 
-            lrc.setLyric(originalLyricsStr, [translatedLyricsStr]);
+            lrc.setLyric(originalLyrics.join('\n'), [translatedLyrics.join('\n')]);
         }
 
         function startLrcSync() {
@@ -492,7 +489,7 @@
                 const currentTime = audioPlayer.currentTime * 1000; // 转换为毫秒
                 document.getElementById("playing-time").textContent = formatTime(audioPlayer.currentTime);
                 const progressPercent = (audioPlayer.currentTime / audioPlayer.duration) * 100;
-                document.getElementById( "progress").style.width = `${progressPercent}%`;
+                document.getElementById("progress").style.width = `${progressPercent}%`;
                 lrc.play(currentTime);
             };
             audioPlayer.onpause = () => {
