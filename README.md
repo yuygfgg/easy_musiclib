@@ -11,14 +11,13 @@ https://github.com/yuygfgg/easy_musiclib/assets/140488233/9d9ad2b4-c3d5-4b4a-9fa
 
 
 
-
+<img width="1460" alt="截屏2024-07-18 19 43 47" src="https://github.com/user-attachments/assets/bc1150d4-5cca-425d-a26d-d55621a77fdf">
 <img width="1863" alt="截屏2024-07-01 21 07 41" src="https://github.com/yuygfgg/easy_musiclib/assets/140488233/77a8b735-4dba-45d3-83a3-99a6310f1cb2">
 <img width="1865" alt="截屏2024-07-01 21 09 07" src="https://github.com/yuygfgg/easy_musiclib/assets/140488233/934f6f9f-5e67-41f0-85bb-b0d2caf4191f">
 <img width="1860" alt="截屏2024-07-01 21 10 09" src="https://github.com/yuygfgg/easy_musiclib/assets/140488233/7350dadd-312d-432d-8bc6-fa5f98749311">
 
 ### Schedual
 
-- add lyrics support : before 2024.08.10
 - mobile app : ~ 2025
 
 The project will continue unless I find another music library server that handles muitiple artist  and muiti-disc albums correctly.
