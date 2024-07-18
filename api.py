@@ -1,12 +1,12 @@
 from flask import Flask, request, jsonify, send_file
 from musiclib import MusicLibrary, Artist, Album, Song
 import os
-import atexit
-import signal
 from flask_cors import CORS
 from flask_compress import Compress
 import json
 import opencc
+import datetime
+import logging
 
 
 app = Flask(__name__)
@@ -17,97 +17,167 @@ library = MusicLibrary()
 data_file = 'library_data.json'
 
 def save_library():
-    """Saves the current state of the music library to a JSON file."""
+    def convert_datetime(obj):
+        if isinstance(obj, datetime.datetime):
+            return obj.isoformat()
+        raise TypeError(f"Type {type(obj)} not serializable")
+
+    def serialize_data(data):
+        if isinstance(data, dict):
+            return {k: serialize_data(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [serialize_data(v) for v in data]
+        elif isinstance(data, set):
+            return list(data)
+        elif isinstance(data, datetime.datetime):
+            return data.isoformat()
+        return data
+
     data = {
-        'artists': {uuid: artist.__dict__ for uuid, artist in library.artists.items()},
-        'albums': {uuid: {
+        'artists': {uuid: serialize_data(artist.__dict__) for uuid, artist in library.artists.items()},
+        'albums': {uuid: serialize_data({
             **album.__dict__,
             'album_artists': [artist.uuid for artist in album.album_artists],
             'songs': [song.uuid for song in album.songs]
-        } for uuid, album in library.albums.items()},
-        'songs': {uuid: {
+        }) for uuid, album in library.albums.items()},
+        'songs': {uuid: serialize_data({
             **song.__dict__,
             'album': song.album['uuid'],
             'artists': [artist['uuid'] for artist in song.artists]
-        } for uuid, song in library.songs.items()},
-        'graph': {k: {kk: {'strength': vv['strength'], 'details': list(vv['details'])} for kk, vv in v.items()} for k, v in library.graph.items()}  # Convert sets to lists for JSON serialization
+        }) for uuid, song in library.songs.items()},
+        'graph': serialize_data(library.graph)  # Convert sets to lists for JSON serialization
     }
-
+    try: 
+        os.remove(data_file)
+    except Exception as e:
+        print(e)
+        pass
+    
     try:
         with open(data_file, 'w', encoding='utf-8') as file:
-            json.dump(data, file, ensure_ascii=False, indent=4)
+            json.dump(data, file, ensure_ascii=False, indent=4, default=convert_datetime)
         print("Library saved to file")
     except Exception as e:
         print(f"Failed to save library to file: {e}")
 
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 def load_library():
-    """Loads the music library state from a JSON file."""
     global library
+
+    def parse_datetime(obj, fields):
+        for field in fields:
+            if field in obj and obj[field] is not None:
+                try:
+                    obj[field] = datetime.datetime.fromisoformat(obj[field])
+                except ValueError as e:
+                    logger.error(f"Failed to parse datetime from value '{obj[field]}' in field '{field}': {e}")
+                    obj[field] = None
+
     try:
         if os.path.exists(data_file):
+            file_size = os.path.getsize(data_file)
+            logger.debug(f"Loading library from file: {data_file} (size: {file_size} bytes)")
+
             with open(data_file, 'r', encoding='utf-8') as file:
-                data = json.load(file)
+                try:
+                    data = json.load(file)
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON decode error at line {e.lineno} column {e.colno}: {e.msg}")
+                    raise
+                except UnicodeDecodeError as e:
+                    logger.error(f"Unicode decode error: {e.reason} at position {e.start}-{e.end}")
+                    raise
 
             library = MusicLibrary()
-            
+            logger.debug("Instantiated MusicLibrary")
+
             # Restore artists
-            for uuid, artist_data in data['artists'].items():
-                artist = Artist(artist_data['name'])
-                artist.uuid = artist_data['uuid']
-                artist.is_liked = artist_data['is_liked']
-                artist.liked_time = artist_data['liked_time']
-                artist.artist_art_path = artist_data['artist_art_path']
-                library.artists[uuid] = artist
+            try:
+                for uuid, artist_data in data['artists'].items():
+                    parse_datetime(artist_data, ['liked_time'])
+                    artist = Artist(artist_data['name'])
+                    artist.uuid = artist_data['uuid']
+                    artist.is_liked = artist_data['is_liked']
+                    artist.liked_time = artist_data.get('liked_time')
+                    artist.artist_art_path = artist_data['artist_art_path']
+                    library.artists[uuid] = artist
+                logger.debug("Restored artists")
+            except Exception as e:
+                logger.error(f"Failed to restore artists: {e}")
+                raise
 
             # Restore albums
-            for uuid, album_data in data['albums'].items():
-                album = Album(album_data['name'])
-                album.uuid = album_data['uuid']
-                album.is_liked = album_data['is_liked']
-                album.liked_time = album_data['liked_time']
-                album.album_art_path = album_data['album_art_path']
-                album.year = album_data['year']
-                album.album_artists = {library.artists[artist_uuid] for artist_uuid in album_data['album_artists']}
-                album.songs = []
-                library.albums[uuid] = album
+            try:
+                for uuid, album_data in data['albums'].items():
+                    parse_datetime(album_data, ['liked_time'])
+                    album = Album(album_data['name'])
+                    album.uuid = album_data['uuid']
+                    album.is_liked = album_data['is_liked']
+                    album.liked_time = album_data.get('liked_time')
+                    album.album_art_path = album_data['album_art_path']
+                    album.year = album_data['year']
+                    album.album_artists = {library.artists[artist_uuid] for artist_uuid in album_data['album_artists']}
+                    album.songs = []
+                    library.albums[uuid] = album
+                logger.debug("Restored albums")
+            except Exception as e:
+                logger.error(f"Failed to restore albums: {e}")
+                raise
 
             # Restore songs
-            for uuid, song_data in data['songs'].items():
-                album = library.albums[song_data['album']]
-                artists = [library.artists[artist_uuid] for artist_uuid in song_data['artists']]
-                song = Song(
-                    song_data['name'], album, artists, song_data['file_path'],
-                    song_data['track_number'], song_data['disc_number'], song_data['year']
-                )
-                song.uuid = song_data['uuid']
-                song.is_liked = song_data['is_liked']
-                song.liked_time = song_data['liked_time']
-                song.song_art_path = song_data['song_art_path']
-                library.songs[uuid] = song
-                album.songs.append(song)
+            try:
+                for uuid, song_data in data['songs'].items():
+                    parse_datetime(song_data, ['liked_time'])
+                    album = library.albums[song_data['album']]
+                    artists = [library.artists[artist_uuid] for artist_uuid in song_data['artists']]
+                    song = Song(
+                        song_data['name'], album, artists, song_data['file_path'],
+                        song_data['track_number'], song_data['disc_number'], song_data['year']
+                    )
+                    song.uuid = song_data['uuid']
+                    song.is_liked = song_data['is_liked']
+                    song.liked_time = song_data.get('liked_time')
+                    song.song_art_path = song_data.get('song_art_path')
+
+                    if song_data['file_path'] is None:
+                        logger.warning(f"File path is None for song: {song_data['name']} (UUID: {song_data['uuid']})")
+
+                    if song_data.get('song_art_path') is None:
+                        logger.warning(f"Song art path is None for song: {song_data['name']} (UUID: {song_data['uuid']})")
+
+                    library.songs[uuid] = song
+                    album.songs.append(song)
+                logger.debug("Restored songs")
+            except Exception as e:
+                logger.error(f"Failed to restore songs: {e}")
+                raise
 
             # Restore graph
-            library.graph = {k: {kk: {'strength': vv['strength'], 'details': set(vv['details'])} for kk, vv in v.items()} for k, v in data.get('graph', {}).items()}
+            try:
+                library.graph = {k: {kk: {'strength': vv['strength'], 'details': set(vv['details'])} for kk, vv in v.items()} for k, v in data.get('graph', {}).items()}
+                logger.debug("Restored graph")
+            except Exception as e:
+                logger.error(f"Failed to restore graph: {e}")
+                raise
 
             # Reinitialize OpenCC object
-            library.cc = opencc.OpenCC('t2s')
+            try:
+                library.cc = opencc.OpenCC('t2s')
+                logger.debug("Reinitialized OpenCC object")
+            except Exception as e:
+                logger.error(f"Failed to reinitialize OpenCC object: {e}")
+                raise
 
-            print("Library loaded from file")
+            logger.debug("Library loaded from file")
         else:
-            print("No library file found, starting with an empty library")
+            logger.debug("No library file found, starting with an empty library")
     except Exception as e:
-        print(f"Failed to load library from file: {e}")
-        
+        logger.error(f"Failed to load library from file: {e}")
+        raise
+
 load_library()
-
-atexit.register(save_library)
-
-def handle_sigint(signal, frame):
-    print("SIGINT received. Saving library and exiting...")
-    save_library()
-    os._exit(0)
-
-signal.signal(signal.SIGINT, handle_sigint)
 
 @app.route('/add_song', methods=['GET'])
 def add_song():
@@ -121,7 +191,7 @@ def add_song():
 
     album = library.goto_album(album_uuid)
     artists = [library.goto_artist(uuid) for uuid in artist_uuids]
-    
+
     song = Song(name, album, artists, file_path, track_number, disc_number, year)
     library.add_song(song)
     album.update_year()
@@ -217,28 +287,28 @@ def search_artist(name):
 def show_library():
     return jsonify({
             'songs': [{
-                'name': song.name, 
-                'uuid': song.uuid, 
-                'artists': song.artists, 
-                'album': song.album, 
-                'song_art_path': song.song_art_path, 
-                'is_liked': song.is_liked, 
-                'liked_time': song.liked_time, 
+                'name': song.name,
+                'uuid': song.uuid,
+                'artists': song.artists,
+                'album': song.album,
+                'song_art_path': song.song_art_path,
+                'is_liked': song.is_liked,
+                'liked_time': song.liked_time,
                 'file_path': song.file_path
             } for song in library.songs.values()],
             'albums': [{
-                'name': album.name, 
-                'uuid': album.uuid, 
-                'year': album.year, 
-                'album_art_path': album.album_art_path, 
-                'is_liked': album.is_liked, 
+                'name': album.name,
+                'uuid': album.uuid,
+                'year': album.year,
+                'album_art_path': album.album_art_path,
+                'is_liked': album.is_liked,
                 'liked_time': album.liked_time
             } for album in library.albums.values()],
             'artists': [{
-                'name': artist.name, 
-                'uuid': artist.uuid, 
-                'artist_art_path': artist.artist_art_path, 
-                'is_liked': artist.is_liked, 
+                'name': artist.name,
+                'uuid': artist.uuid,
+                'artist_art_path': artist.artist_art_path,
+                'is_liked': artist.is_liked,
                 'liked_time': artist.liked_time
             } for artist in library.artists.values()]
         }), 200
@@ -246,11 +316,11 @@ def show_library():
 @app.route('/show_liked_songs', methods=['GET'])
 def show_liked_songs():
     liked_songs = [{
-        'name': song.name, 
-        'uuid': song.uuid, 
-        'artists': song.artists, 
-        'album': song.album, 
-        'song_art_path': song.song_art_path, 
+        'name': song.name,
+        'uuid': song.uuid,
+        'artists': song.artists,
+        'album': song.album,
+        'song_art_path': song.song_art_path,
         'is_liked': song.is_liked,
         'liked_time': song.liked_time,
         'file_path': song.file_path
@@ -260,9 +330,9 @@ def show_liked_songs():
 @app.route('/show_liked_artists', methods=['GET'])
 def show_liked_artists():
     liked_artists = [{
-        'name': artist.name, 
-        'uuid': artist.uuid, 
-        'artist_art_path': artist.artist_art_path, 
+        'name': artist.name,
+        'uuid': artist.uuid,
+        'artist_art_path': artist.artist_art_path,
         'is_liked': artist.is_liked,
         'liked_time': artist.liked_time
     } for artist in library.artists.values() if artist.is_liked]
@@ -271,10 +341,10 @@ def show_liked_artists():
 @app.route('/show_liked_albums', methods=['GET'])
 def show_liked_albums():
     liked_albums = [{
-        'name': album.name, 
-        'uuid': album.uuid, 
-        'year': album.year, 
-        'album_art_path': album.album_art_path, 
+        'name': album.name,
+        'uuid': album.uuid,
+        'year': album.year,
+        'album_art_path': album.album_art_path,
         'is_liked': album.is_liked,
         'liked_time': album.liked_time
     } for album in library.albums.values() if album.is_liked]
@@ -337,28 +407,28 @@ def search(query):
     results = library.search(query)
     return jsonify({
         'songs': [{
-            'name': song.name, 
-            'uuid': song.uuid, 
-            'artists': song.artists, 
-            'album': song.album, 
-            'song_art_path': song.song_art_path, 
-            'is_liked': song.is_liked, 
-            'liked_time': song.liked_time, 
+            'name': song.name,
+            'uuid': song.uuid,
+            'artists': song.artists,
+            'album': song.album,
+            'song_art_path': song.song_art_path,
+            'is_liked': song.is_liked,
+            'liked_time': song.liked_time,
             'file_path': song.file_path
         } for song in results['songs']],
         'albums': [{
-            'name': album.name, 
-            'uuid': album.uuid, 
-            'year': album.year, 
-            'album_art_path': album.album_art_path, 
-            'is_liked': album.is_liked, 
+            'name': album.name,
+            'uuid': album.uuid,
+            'year': album.year,
+            'album_art_path': album.album_art_path,
+            'is_liked': album.is_liked,
             'liked_time': album.liked_time
         } for album in results['albums']],
         'artists': [{
-            'name': artist.name, 
-            'uuid': artist.uuid, 
-            'artist_art_path': artist.artist_art_path, 
-            'is_liked': artist.is_liked, 
+            'name': artist.name,
+            'uuid': artist.uuid,
+            'artist_art_path': artist.artist_art_path,
+            'is_liked': artist.is_liked,
             'liked_time': artist.liked_time
         } for artist in results['artists']]
     }), 200
@@ -376,7 +446,7 @@ def get_stream():
     file_path = request.args.get('file_path')
     if not file_path or not os.path.exists(file_path):
         return jsonify({'message': 'File not found'}), 404
-    
+
     if file_path.endswith('.mp3'):
         mimetype = 'audio/mpeg'
     elif file_path.endswith('.flac'):
@@ -404,10 +474,10 @@ def show_relation():
 def merge_artist_by_uuid():
     uuid1 = request.args.get('uuid1')
     uuid2 = request.args.get('uuid2')
-    
+
     if not uuid1 or not uuid2:
         return jsonify({'message': 'Both uuid1 and uuid2 are required'}), 400
-    
+
     library.merge_artist_by_uuid(uuid1, uuid2)
     save_library()
     return jsonify({'message': f'Artist {uuid2} merged into {uuid1}'}), 200
@@ -416,7 +486,7 @@ def merge_artist_by_uuid():
 def merge_artist_by_name():
     name1 = request.args.get('name1')
     name2 = request.args.get('name2')
-    
+
     if not name1 or not name2:
         return jsonify({'message': 'Both name1 and name2 are required'}), 400
 
