@@ -310,7 +310,7 @@
         }
 
         #popup-lyrics {
-            max-height: 100vh;
+            max-height: 80vh;
             overflow-y: auto;
         }
     </style>
@@ -464,8 +464,9 @@
             toggleSongPopup();
         });
         let lastLine = -1;
-        let lastText = ''; 
+        let lastText = '';
         function parseLrc(lyrics) {
+            lrc = null;
             const lines = lyrics.split('\n');
             const originalLyrics = [];
             const translatedLyrics = [];
@@ -488,7 +489,8 @@
 
             lrc = new Lyric({
                 onPlay: function (line, text) {
-                    if (line !== lastLine || text !== lastText) {
+                    console.log(line);
+                    if (line !== lastLine || text !== lastText || line == 0) {
                         updateLyricsDisplay(line, text);
                         updateMediaSessionLyrics(text);
                         lastLine = line;
@@ -508,14 +510,7 @@
 
         function updateMediaSessionLyrics(text) {
             if ('mediaSession' in navigator) {
-                navigator.mediaSession.metadata = new MediaMetadata({
-                    title: text,
-                    artist: document.getElementById("popup-artists").textContent,
-                    album: document.getElementById("popup-album").textContent,
-                    artwork: [
-                        { src: document.getElementById("popup-art").src, sizes: '512x512', type: 'image/png' }
-                    ]
-                });
+                navigator.mediaSession.metadata.title = text;
             }
         }
 
@@ -591,7 +586,6 @@
                 document.getElementById("playing-album").innerHTML;
             document.getElementById("popup-lyrics").textContent = "loading...";
             document.getElementById("song-popup").style.display = "flex";
-            fetchLyricsAuto();
         }
         function openLyricsSelectionPopup() {
             document.getElementById("lyrics-selection-popup").style.display =
@@ -614,31 +608,33 @@
 
             // 调用后端API获取歌词选项
             fetch(
-                `${apiBaseUrl}/lyrics?title=${encodeURIComponent(
-                    title
-                )}&artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(
-                    album
-                )}&duration=${duration}`
+                `${apiBaseUrl}/lyrics?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}&duration=${duration}`
             )
-                .then((response) => response.json())
-                .then((data) => {
-                    const lyricsOptionsContainer =
-                        document.getElementById("lyrics-options");
+                .then(response => {
+                    if (response.status === 200) {
+                        return response.json();
+                    } else {
+                        console.log("no lrc");
+                        return Promise.reject('no lrc');
+                    }
+                })
+                .then(data => {
+                    const lyricsOptionsContainer = document.getElementById("lyrics-options");
                     lyricsOptionsContainer.innerHTML = "";
-
-                    // 检查是否有返回结果
                     if (data.length > 0) {
-                        // 默认显示第一个歌词
                         selectLyrics(data[0].lyrics);
                     } else {
-                        document.getElementById("popup-lyrics").textContent =
-                            "未找到歌词"; // 如果没有找到歌词，显示默认消息
+                        document.getElementById("popup-lyrics").textContent = "未找到歌词";
+                        console.log("no lrc");
                     }
+                })
+                .catch(error => {
+                    console.error("Error fetching lyrics:", error);
+                    document.getElementById("popup-lyrics").textContent = "未找到歌词";
                 });
         }
 
         function fetchLyricsOptions() {
-            lrc = null;
             // 获取当前播放的歌曲信息
             const title = document.getElementById("popup-title").textContent;
             const artist = document.getElementById("popup-artists").textContent;
@@ -803,10 +799,8 @@
                 document.getElementById("popup-art").src =
                     song.art || "default_cover.png";
                 document.getElementById("popup-title").textContent = song.title;
-                document.getElementById("popup-artists").innerHTML = song.artists
-                    .map((artist) => artist.name)
-                    .join(", ");
-                document.getElementById("popup-album").innerHTML = song.album;
+                document.getElementById("popup-artists").innerHTML = document.getElementById("playing-artists").innerHTML;
+                document.getElementById("popup-album").innerHTML = document.getElementById("playing-album").innerHTML;
                 document.getElementById("popup-lyrics").textContent = "loading...";
 
                 // 更新媒体会话元数据
