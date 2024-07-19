@@ -309,6 +309,16 @@
             color: #ff0;
         }
 
+        .disable-lyrics-btn {
+            margin-top: 10px;
+            background: none;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
         #popup-lyrics {
             max-height: 80vh;
             overflow-y: auto;
@@ -368,6 +378,7 @@
             <div class="title" id="popup-title">歌曲名称</div>
             <div class="artist" id="popup-artists">歌手</div>
             <div class="album" id="popup-album">专辑</div>
+            <button class="disable-lyrics-btn" onclick="disableLyricsForSong()">Disable Lyrics</button>
         </div>
         <div class="right-section">
             <div class="settings">
@@ -463,8 +474,18 @@
         document.getElementById("playing-art").addEventListener("click", () => {
             toggleSongPopup();
         });
+
         let lastLine = -1;
         let lastText = '';
+
+        function disableLyricsForSong() {
+            if (currentSongUUID) {
+                localStorage.setItem(`lyrics_disabled_${currentSongUUID}`, 'true');
+                document.getElementById("popup-lyrics").textContent = "Disabled";
+                lrc.pause;
+                lrc = null;
+            }
+        }
         function parseLrc(lyrics) {
             lrc = null;
             const lines = lyrics.split('\n');
@@ -585,6 +606,9 @@
             document.getElementById("popup-album").innerHTML =
                 document.getElementById("playing-album").innerHTML;
             document.getElementById("popup-lyrics").textContent = "loading...";
+            if (localStorage.getItem(`lyrics_disabled_${currentSongUUID}`) === 'true') {
+                document.getElementById("popup-lyrics").textContent = "歌词：Disabled";
+            }
             document.getElementById("song-popup").style.display = "flex";
         }
         function openLyricsSelectionPopup() {
@@ -605,6 +629,19 @@
             const artist = document.getElementById("popup-artists").textContent;
             const album = document.getElementById("popup-album").textContent;
             const duration = audioPlayer.duration;
+
+            // Check if lyrics are disabled for this song
+            if (localStorage.getItem(`lyrics_disabled_${currentSongUUID}`) === 'true') {
+                document.getElementById("popup-lyrics").textContent = "歌词：Disabled";
+                return;
+            }
+
+            // Check localStorage for saved lyrics
+            const savedLyrics = localStorage.getItem(`lyrics_${currentSongUUID}`);
+            if (savedLyrics) {
+                selectLyrics(savedLyrics);
+                return;
+            }
 
             // 调用后端API获取歌词选项
             fetch(
@@ -684,6 +721,9 @@
         function selectLyrics(lyrics) {
             parseLrc(lyrics);
             startLrcSync();
+            if (currentSongUUID) {
+                localStorage.setItem(`lyrics_${currentSongUUID}`, lyrics);
+            }
         }
         function closeSongPopup() {
             document.getElementById("song-popup").style.display = "none";
