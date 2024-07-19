@@ -477,7 +477,7 @@
 
         let lastLine = -1;
         let lastText = '';
-
+        let isManuallyOpen = false; // Is songPopup opened during playing current song
         function disableLyricsForSong() {
             if (currentSongUUID) {
                 localStorage.setItem(`lyrics_disabled_${currentSongUUID}`, 'true');
@@ -511,11 +511,12 @@
             lrc = new Lyric({
                 onPlay: function (line, text) {
                     console.log(line);
-                    if (line !== lastLine || text !== lastText || line == 0) {
+                    if (line !== lastLine || text !== lastText || isManuallyOpen) {
                         updateLyricsDisplay(line, text);
                         updateMediaSessionLyrics(text);
                         lastLine = line;
                         lastText = text;
+                        isManuallyOpen =false;
                     }
                 },
                 onSetLyric: function (lines) {
@@ -610,6 +611,7 @@
                 document.getElementById("popup-lyrics").textContent = "歌词：Disabled";
             }
             document.getElementById("song-popup").style.display = "flex";
+            isManuallyOpen = true;
         }
         function openLyricsSelectionPopup() {
             document.getElementById("lyrics-selection-popup").style.display =
