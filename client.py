@@ -225,7 +225,7 @@ class MusicLibraryConsole(Cmd):
         result = self.client.search_song(args)
         self.print_song_details(result)
 
-    def do_show_library(self, args):
+    def do_show_library(self):
         """Show the entire music library: show_library"""
         result = self.client.show_library()
         self.print_library_details(result)
@@ -254,17 +254,17 @@ class MusicLibraryConsole(Cmd):
         result = self.client.show_song(args)
         self.print_song_details(result)
 
-    def do_show_liked_songs(self, args):
+    def do_show_liked_songs(self):
         """Show liked songs: show_liked_songs"""
         result = self.client.show_liked_songs()
         self.print_liked_songs(result)
 
-    def do_show_liked_artists(self, args):
+    def do_show_liked_artists(self):
         """Show liked artists: show_liked_artists"""
         result = self.client.show_liked_artists()
         self.print_liked_artists(result)
 
-    def do_show_liked_albums(self, args):
+    def do_show_liked_albums(self):
         """Show liked albums: show_liked_albums"""
         result = self.client.show_liked_albums()
         self.print_liked_albums(result)
@@ -365,7 +365,7 @@ class MusicLibraryConsole(Cmd):
         result = self.client.scan(args)
         self.pretty_print_json(result)
 
-    def do_exit(self, args):
+    def do_exit(self):
         """Exit the console"""
         print("Goodbye!")
         return True

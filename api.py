@@ -52,7 +52,6 @@ def save_library():
         os.remove(data_file)
     except Exception as e:
         print(e)
-        pass
     
     try:
         with open(data_file, 'w', encoding='utf-8') as file:

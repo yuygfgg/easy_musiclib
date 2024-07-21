@@ -393,7 +393,7 @@ class MusicLibrary:
         file_path = os.path.join(os.getcwd(), 'artist_alias.csv')
         
         if not os.path.isfile(file_path):
-            print(f"File artist_alias.csv not found in the current directory.")
+            print("File artist_alias.csv not found in the current directory.")
             return
 
         with open(file_path, newline='', encoding='utf-8-sig') as csvfile:
