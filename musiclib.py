@@ -578,9 +578,9 @@ class MusicLibrary:
             print(f"Album {uuid} not found.")
     
     def search(self, query):
-        matched_songs = [song for song in self.songs.values() if fuzz.partial_ratio(query.lower(), song.name.lower()) > 75]
-        matched_albums = [album for album in self.albums.values() if fuzz.partial_ratio(query.lower(), album.name.lower()) > 75]
-        matched_artists = [artist for artist in self.artists.values() if fuzz.partial_ratio(query.lower(), artist.name.lower()) > 75]
+        matched_songs = [song for song in self.songs.values() if fuzz.partial_ratio(self.normalize_name(query), self.normalize_name(song.name)) > 75]
+        matched_albums = [album for album in self.albums.values() if fuzz.partial_ratio(self.normalize_name(query), self.normalize_name(album.name)) > 75]
+        matched_artists = [artist for artist in self.artists.values() if fuzz.partial_ratio(self.normalize_name(query), self.normalize_name(artist.name)) > 75]
         
         return {
             'songs': matched_songs,
