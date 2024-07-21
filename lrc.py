@@ -88,7 +88,8 @@ def get_aligned_lyrics(title, artist, album, duration):
     search_keywords = [
         f"{artist} - {album} - {title}",
         f"{album} - {title}",
-        f"{artist} - {title}"
+        f"{artist} - {title}",
+        f"{title}"
     ]
 
     results = []
@@ -99,7 +100,7 @@ def get_aligned_lyrics(title, artist, album, duration):
             continue
 
         songs = search_result.get('songs', [])
-        songs = [song for song in songs if abs(song['duration'] / 1000 - duration) <= 3]
+        songs = [song for song in songs if abs(song['duration'] / 1000 - duration) <= 10]
 
         for song in songs[:3]:
             lyrics_content, trans_lyrics_content = download_lyrics(song['id'])
@@ -121,6 +122,6 @@ def get_aligned_lyrics(title, artist, album, duration):
                         "lyrics": merged,
                         "similarity": similarity
                     })
-
+            
     results.sort(key=lambda x: x['similarity'], reverse=True)
     return results

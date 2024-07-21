@@ -345,6 +345,7 @@
     </div>
     <div id="content">
         <iframe id="content-frame" src=""></iframe>
+        <iframe id="hidden-frame" style="display:none;"></iframe>
     </div>
 
     <div class="player-bar" id="player-bar">
@@ -516,7 +517,7 @@
                         updateMediaSessionLyrics(text);
                         lastLine = line;
                         lastText = text;
-                        isManuallyOpen =false;
+                        isManuallyOpen = false;
                     }
                 },
                 onSetLyric: function (lines) {
@@ -803,6 +804,21 @@
             }
         }
 
+        function receivePlaySongFromVisibleIframe(song) {
+            const hiddenIframe = document.getElementById("hidden-frame");
+            const visibleIframe = document.getElementById("content-frame");
+
+            // 同步隐藏 iframe 的 URL
+            hiddenIframe.src = visibleIframe.src;
+
+            // 发送播放请求到隐藏 iframe
+            playSong(song);
+        }
+
+        function receivePlaySongFromHiddenIframe(song) {
+            playSong(song);
+        }
+
         async function playSong(song) {
             try {
                 console.log("Playing song:", song);
@@ -884,13 +900,13 @@
         }
 
         function playPreviousSong() {
-            const iframe = document.getElementById("content-frame").contentWindow;
-            iframe.postMessage({ action: "previous" }, "*");
+            const hiddenIframe = document.getElementById("hidden-frame");
+            hiddenIframe.contentWindow.postMessage({ action: "previous" }, "*");
         }
 
         function playNextSong() {
-            const iframe = document.getElementById("content-frame").contentWindow;
-            iframe.postMessage({ action: "next" }, "*");
+            const hiddenIframe = document.getElementById("hidden-frame");
+            hiddenIframe.contentWindow.postMessage({ action: "next" }, "*");
         }
         function navigateToArtistPage(artistUUID) {
             navigateTo(`artist.html?uuid=${artistUUID}`);
@@ -1032,7 +1048,11 @@
         // 接收来自 iframe 的消息
         window.addEventListener("message", (event) => {
             if (event.data.action === "playSong") {
-                playSong(event.data.song);
+                if (event.source === document.getElementById("content-frame").contentWindow) {
+                    receivePlaySongFromVisibleIframe(event.data.song);
+                } else if (event.source === document.getElementById("hidden-frame").contentWindow) {
+                    receivePlaySongFromHiddenIframe(event.data.song);
+                }
             } else if (event.data.action === "navigateTo") {
                 navigateTo(event.data.url);
             }

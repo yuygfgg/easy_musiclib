@@ -8,3 +8,4 @@ temp*
 testsplit.py
 library_data.json
 split.py
+GUI.py
