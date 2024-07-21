@@ -111,7 +111,7 @@
         let apiBaseUrl = "http://127.0.0.1:5010";
         const urlParams = new URLSearchParams(window.location.search);
         apiBaseUrl = urlParams.get("apibaseUrl");
-        let currentIndex = 0;
+        window.currentIndex = 0;
         let likedSongs = [];
         let currentSong = null;
 

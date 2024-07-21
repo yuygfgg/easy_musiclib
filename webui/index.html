@@ -808,6 +808,13 @@
             const hiddenIframe = document.getElementById("hidden-frame");
             const visibleIframe = document.getElementById("content-frame");
 
+            console.log(visibleIframe.contentWindow.currentIndex);
+
+            hiddenIframe.onload = function () {
+                hiddenIframe.contentWindow.currentIndex = visibleIframe.contentWindow.currentIndex;
+
+                // 发送播放请求到隐藏 iframe
+            };
             // 同步隐藏 iframe 的 URL
             hiddenIframe.src = visibleIframe.src;
 
