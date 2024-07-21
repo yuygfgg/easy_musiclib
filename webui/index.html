@@ -80,6 +80,14 @@
             cursor: pointer;
         }
 
+        .player-bar .song-details .title,
+        .player-bar .song-details .artist,
+        .player-bar .song-details .album {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .player-controls {
             display: flex;
             align-items: center;
@@ -128,7 +136,6 @@
         }
 
         .input-container input {
-            width: 300px;
             padding: 10px;
             border: 1px solid #444;
             background-color: #1e1e1e;
@@ -155,7 +162,6 @@
         }
 
         .search-container input {
-            width: 200px;
             padding: 5px;
             margin-right: 5px;
             background-color: #1e1e1e;
@@ -323,27 +329,132 @@
             max-height: 80vh;
             overflow-y: auto;
         }
+
+        .sidebar {
+            background-color: #2e2e2e;
+            padding: 20px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #fff;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 250px;
+            transition: transform 0.3s ease-in-out;
+            transform: translateX(-100%);
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        .sidebar.open {
+            transform: translateX(0);
+        }
+
+        .sidebar .input-container,
+        .sidebar .search-container,
+        .sidebar a {
+            width: 100%;
+            margin: 10px 0;
+            text-align: left;
+        }
+
+        .sidebar a {
+            color: #ffffff;
+            text-decoration: none;
+            font-size: 18px;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .sidebar a:hover {
+            background-color: #444;
+        }
+
+        .sidebar .input-container {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar .input-container input,
+        .sidebar .input-container button {
+            margin: 5px 0;
+        }
+
+        .sidebar .input-container input {
+            padding: 10px;
+            border: 1px solid #444;
+            background-color: #1e1e1e;
+            color: #fff;
+            border-radius: 5px;
+        }
+
+        .sidebar .input-container button {
+            padding: 10px;
+            background-color: #007bff;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .toggle-sidebar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 30px;
+            cursor: pointer;
+            z-index: 1001;
+        }
+
+        .content {
+            margin-left: 250px;
+            transition: margin-left 0.3s ease-in-out;
+        }
+
+        .content.shifted {
+            margin-left: 0;
+        }
+
+        @media (max-width: 768px) {
+            .song-popup .left-section {
+                display: none;
+            }
+
+            .content {
+                margin-left: 0;
+            }
+            .player-bar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+    
+            .progress-container {
+                order: -1;
+                width: 100%;
+                margin: 0 0 10px 0;
+            }
+        }
     </style>
 </head>
 
 <body>
-    <div class="navbar">
+    <button class="toggle-sidebar" onclick="toggleSidebar()">☰</button>
+    <div class="sidebar" id="sidebar">
         <div class="input-container">
-            <div>
-                <input type="text" id="apiBaseUrl" placeholder="输入api服务地址" />
-                <button onclick="setapiBaseUrl()">设定</button>
-            </div>
+            <input type="text" id="apiBaseUrl" placeholder="输入api服务地址" />
+            <button onclick="setapiBaseUrl()">设定</button>
         </div>
         <div class="search-container">
             <input type="text" id="search-query" placeholder="搜索..." onkeydown="handleSearchKey(event)" />
-            <button onclick="navigateToSearch()">
-                <img src="search.svg" alt="搜索" style="height: 20px" />
-            </button>
         </div>
         <a href="#" onclick="navigateToLiked()">我喜欢的</a>
         <a href="#" onclick="navigateToAll()">首页</a>
     </div>
-    <div id="content">
+    <div class="content shifted" id="content">
         <iframe id="content-frame" src=""></iframe>
         <iframe id="hidden-frame" style="display:none;"></iframe>
     </div>
@@ -449,6 +560,7 @@
                 `Navigating to search.html?query=${encodeURIComponent(query)}`
             ); // Log URL for debugging
             navigateTo(`search.html?query=${encodeURIComponent(query)}`);
+            toggleSidebar();
         }
 
         function setapiBaseUrl() {
@@ -460,18 +572,26 @@
                 alert("请输入apibaseurl");
             }
             saveApiBaseUrl(apiBaseUrl);
+            toggleSidebar();
         }
 
         function navigateToLiked() {
             console.log("Navigating to liked.html"); // Log navigation for debugging
             navigateToForLikedAndAll("liked.html");
+            toggleSidebar();
         }
 
         function navigateToAll() {
             console.log("Navigating to all.html"); // Log navigation for debugging
             navigateToForLikedAndAll("all.html");
+            toggleSidebar();
         }
-
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const content = document.getElementById('content');
+            sidebar.classList.toggle('open');
+            content.classList.toggle('shifted');
+        }
         document.getElementById("playing-art").addEventListener("click", () => {
             toggleSongPopup();
         });
