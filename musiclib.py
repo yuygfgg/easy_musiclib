@@ -1,4 +1,4 @@
-from rapidfuzz import process, fuzz
+from fuzzywuzzy import fuzz
 from mutagen.easyid3 import EasyID3
 from mutagen.flac import FLAC
 import os
@@ -578,13 +578,10 @@ class MusicLibrary:
             print(f"Album {uuid} not found.")
     
     def search(self, query):
-        import re
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
+        matched_songs = [song for song in self.songs.values() if fuzz.partial_ratio(query.lower(), song.name.lower()) > 75]
+        matched_albums = [album for album in self.albums.values() if fuzz.partial_ratio(query.lower(), album.name.lower()) > 75]
+        matched_artists = [artist for artist in self.artists.values() if fuzz.partial_ratio(query.lower(), artist.name.lower()) > 75]
         
-        matched_songs = [song for song in self.songs.values() if pattern.search(song.name)]
-        matched_albums = [album for album in self.albums.values() if pattern.search(album.name)]
-        matched_artists = [artist for artist in self.artists.values() if pattern.search(artist.name)]
-
         return {
             'songs': matched_songs,
             'albums': matched_albums,
