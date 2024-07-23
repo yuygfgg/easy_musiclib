@@ -41,7 +41,7 @@ Webui is currently in **Chinese** only.
 1. webui is avaliable at http://server_address:5010/
 
 #### API
-1. APIs are at http://server_address:5010/
+1. APIs are at http://server_address:5010/api/
 
 
 ### Contribution
