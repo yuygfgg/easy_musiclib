@@ -20,95 +20,95 @@ class MusicLibraryClient:
             "disc_number": disc_number,
             "year": year
         }
-        response = requests.get(f"{self.base_url}/add_song", params=params, headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/add_song", params=params, headers=self.headers)
         return response.json()
 
     def add_album(self, name, year=None):
         params = {"name": name, "year": year}
-        response = requests.get(f"{self.base_url}/add_album", params=params, headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/add_album", params=params, headers=self.headers)
         return response.json()
 
     def add_artist(self, name):
         params = {"name": name}
-        response = requests.get(f"{self.base_url}/add_artist", params=params, headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/add_artist", params=params, headers=self.headers)
         return response.json()
 
     def search_song(self, name):
-        response = requests.get(f"{self.base_url}/search_song/{name}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/search_song/{name}", headers=self.headers)
         return response.json()
 
     def search_album(self, name):
-        response = requests.get(f"{self.base_url}/search_album/{name}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/search_album/{name}", headers=self.headers)
         return response.json()
 
     def search_artist(self, name):
-        response = requests.get(f"{self.base_url}/search_artist/{name}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/search_artist/{name}", headers=self.headers)
         return response.json()
 
     def like_song(self, uuid):
-        response = requests.get(f"{self.base_url}/like_song/{uuid}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/like_song/{uuid}", headers=self.headers)
         return response.json()
 
     def unlike_song(self, uuid):
-        response = requests.get(f"{self.base_url}/unlike_song/{uuid}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/unlike_song/{uuid}", headers=self.headers)
         return response.json()
 
     def like_album(self, uuid):
-        response = requests.get(f"{self.base_url}/like_album/{uuid}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/like_album/{uuid}", headers=self.headers)
         return response.json()
 
     def unlike_album(self, uuid):
-        response = requests.get(f"{self.base_url}/unlike_album/{uuid}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/unlike_album/{uuid}", headers=self.headers)
         return response.json()
 
     def like_artist(self, uuid):
-        response = requests.get(f"{self.base_url}/like_artist/{uuid}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/like_artist/{uuid}", headers=self.headers)
         return response.json()
 
     def unlike_artist(self, uuid):
-        response = requests.get(f"{self.base_url}/unlike_artist/{uuid}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/unlike_artist/{uuid}", headers=self.headers)
         return response.json()
 
     def show_library(self):
-        response = requests.get(f"{self.base_url}/show_library", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/show_library", headers=self.headers)
         return response.json()
 
     def show_liked_songs(self):
-        response = requests.get(f"{self.base_url}/show_liked_songs", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/show_liked_songs", headers=self.headers)
         return response.json()
 
     def show_liked_artists(self):
-        response = requests.get(f"{self.base_url}/show_liked_artists", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/show_liked_artists", headers=self.headers)
         return response.json()
 
     def show_liked_albums(self):
-        response = requests.get(f"{self.base_url}/show_liked_albums", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/show_liked_albums", headers=self.headers)
         return response.json()
 
     def scan(self, directory):
         params = {"directory": directory}
-        response = requests.get(f"{self.base_url}/scan", params=params, headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/scan", params=params, headers=self.headers)
         return response.json()
 
     def show_song(self, uuid):
-        response = requests.get(f"{self.base_url}/show_song/{uuid}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/show_song/{uuid}", headers=self.headers)
         return response.json()
 
     def show_album(self, uuid):
-        response = requests.get(f"{self.base_url}/show_album/{uuid}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/show_album/{uuid}", headers=self.headers)
         return response.json()
 
     def show_artist(self, uuid):
-        response = requests.get(f"{self.base_url}/show_artist/{uuid}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/show_artist/{uuid}", headers=self.headers)
         return response.json()
 
     def search(self, query):
-        response = requests.get(f"{self.base_url}/search/{query}", headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/search/{query}", headers=self.headers)
         return response.json()
 
     def get_file(self, file_path):
         params = {"file_path": file_path}
-        response = requests.get(f"{self.base_url}/getfile", params=params, headers=self.headers)
+        response = requests.get(f"{self.base_url}/api/getfile", params=params, headers=self.headers)
         return response.content
 
 class MusicLibraryConsole(Cmd):
