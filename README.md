@@ -30,16 +30,18 @@ Webui is currently in **Chinese** only.
 
 #### Server Setup
 1. Clone the repository
-2. Install all necessary python packages ``` pip install -r requirements.txt ```
-3. install ``` mpv ``` to play music in cli client
-4. Run api.py ```python api.py ```
-5. modify ``` base_url ``` in ``` client.py ```
-6. run cli client ```python client.py```
-7. run webui server in ``` webui ``` folder:  ``` node server.js ```
+2. Install all necessary python packages ``` pypy3 -m pip install -r requirements.txt ```
+3. Run server ```pypy3 server.py ```
 
 #### Scan Directory
-1. run cli client ```python client.py```
-2. run command ``` scan_directory /path/to/music ```
+1. install cURL
+2. run command ``` curl "http://server_address/scan?directory=path_to_music" ```
+
+#### Webui
+1. webui is avaliable at http://server_address:5010/
+
+#### API
+1. APIs are at http://server_address:5010/
 
 
 ### Contribution

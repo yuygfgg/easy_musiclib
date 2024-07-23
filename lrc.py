@@ -25,8 +25,6 @@ def download_lyrics(song_id):
     return lrc, tlyric
 
 def attempt_to_download_lyrics_from_songs(songs):
-    print("Starting to attempt to download lyrics for songs list:")
-    print(songs)
     for index, song in enumerate(songs):
         print(f"Trying song {index + 1}/{len(songs)} with id {song['id']}")
         try:

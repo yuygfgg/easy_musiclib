@@ -1,4 +1,4 @@
-from flask import Flask, Response, request, jsonify, send_file
+from flask import Flask, Response, request, jsonify, send_file, send_from_directory
 from musiclib import MusicLibrary, Artist, Album, Song
 import os
 from flask_cors import CORS
@@ -16,6 +16,7 @@ Compress(app)
 
 library = MusicLibrary()
 data_file = 'library_data.json'
+static_folder='webui'
 
 def save_library():
     def convert_datetime(obj):
@@ -525,6 +526,16 @@ def lyrics():
         response = Response('', status=404)
         response.headers['Content-Type'] = 'application/json'
         return response
+
+@app.route('/', methods=['GET'])
+def serve_static_index():
+    print("index")
+    return send_from_directory(static_folder, 'index.html')
+
+@app.route('/<path:path>', methods=['GET'])
+def serve_static(path):
+    return send_from_directory(static_folder, path)
+
 if __name__ == '__main__':
     load_library()
     app.run(debug=True, port=5010, host='0.0.0.0')
