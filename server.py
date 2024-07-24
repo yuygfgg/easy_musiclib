@@ -338,7 +338,7 @@ def show_liked_artists():
     } for artist in library.artists.values() if artist.is_liked]
     return jsonify(liked_artists), 200
 
-@app.route('/show_liked_albums', methods=['GET'])
+@app.route('/api/show_liked_albums', methods=['GET'])
 def show_liked_albums():
     liked_albums = [{
         'name': album.name,
