@@ -443,10 +443,7 @@
 <body>
     <button class="toggle-sidebar" onclick="toggleSidebar()">☰</button>
     <div class="sidebar" id="sidebar">
-        <div class="input-container">
-            <input type="text" id="apiBaseUrl" placeholder="输入api服务地址" />
-            <button onclick="setapiBaseUrl()">设定</button>
-        </div>
+        <br>
         <div class="search-container">
             <input type="text" id="search-query" placeholder="搜索..." onkeydown="handleSearchKey(event)" />
         </div>
@@ -510,30 +507,22 @@
     <audio id="audio-player" src=""></audio>
     <script src="https://cdn.jsdelivr.net/npm/lrc@2.1.0/lrc.min.js"></script>
     <script>
-        let apiBaseUrl = "http://127.0.0.1:5010/api";
+        let apiBaseUrl = window.location.origin;
         let isPlaying = false;
         let isRepeating = false;
         let currentSongUUID = null;
         let lrc = null;
 
-        var storedApiBaseUrl = localStorage.getItem("apiBaseUrl");
-        if (storedApiBaseUrl) {
-            apiBaseUrl = storedApiBaseUrl;
+        if (!apiBaseUrl.endsWith('/')) {
+            apiBaseUrl += '/';
         }
-
-        function saveApiBaseUrl(apiBaseUrl) {
-            if (
-                window.webkit &&
-                window.webkit.messageHandlers &&
-                window.webkit.messageHandlers.saveApiBaseUrl
-            ) {
-                window.webkit.messageHandlers.saveApiBaseUrl.postMessage(apiBaseUrl);
-            } else {
-                // Fallback for web server environment
-                console.log("Saving apiBaseUrl:", apiBaseUrl);
-                localStorage.setItem("apiBaseUrl", apiBaseUrl);
-            }
+        
+        let apiPath = "api";
+        if (apiPath.startsWith('/')) {
+            apiPath = apiPath.substring(1);
         }
+        
+        apiBaseUrl += apiPath;
 
         function navigateTo(url) {
             const iframe = document.getElementById("content-frame");
@@ -559,18 +548,6 @@
                 `Navigating to search.html?query=${encodeURIComponent(query)}`
             ); // Log URL for debugging
             navigateTo(`search.html?query=${encodeURIComponent(query)}`);
-            toggleSidebar();
-        }
-
-        function setapiBaseUrl() {
-            const query = document.getElementById("apiBaseUrl").value;
-            if (query) {
-                console.log(`set apibaseUrl to ${encodeURIComponent(query)}`); // Log URL for debugging
-                apiBaseUrl = query;
-            } else {
-                alert("请输入apibaseurl");
-            }
-            saveApiBaseUrl(apiBaseUrl);
             toggleSidebar();
         }
 
