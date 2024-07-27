@@ -136,6 +136,15 @@ class MusicLibrary:
             if album.name == name:
                 return album
         return None
+    
+    def find_album_by_name_artist_year(self, name, album_artist_names, year):
+        for album in self.albums.values():
+            album_artist_names_set = {artist.name for artist in album.album_artists}
+            if (album.name == name and 
+                (album.year == year or (album.year is None and year is None)) and
+                (album_artist_names_set == set(album_artist_names) or (not album_artist_names and not album.album_artists))):
+                return album
+        return None
 
     def find_song_by_name(self, name):
         name = name.strip()
@@ -172,24 +181,24 @@ class MusicLibrary:
                         disc_number = id3_tags['disc_number']
                         year = id3_tags['year']
 
-                        album = self.find_album_by_name(album_name)
+                        album = self.find_album_by_name_artist_year(album_name, album_artist_names, year)
                         if not album:
                             print(f"Adding new album {album_name} because it doesn't exist now.")
                             album = Album(album_name)
+                            album.year = year
+                            for artist_name in album_artist_names:
+                                artist = self.find_artist_by_name(artist_name)
+                                if not artist:
+                                    artist = Artist(artist_name)
+                                    self.add_artist(artist)
+                                album.album_artists.add(artist)
                             self.add_album(album)
-
-                        for artist_name in album_artist_names:
-                            artist = self.find_artist_by_name(artist_name)
-                            if not artist:
-                                artist = Artist(artist_name)  # 保留原始大小写
-                                self.add_artist(artist)
-                            album.album_artists.add(artist)
 
                         song_artists = []
                         for artist_name in artist_names:
                             artist = self.find_artist_by_name(artist_name)
                             if not artist:
-                                artist = Artist(artist_name)  # 保留原始大小写
+                                artist = Artist(artist_name)
                                 self.add_artist(artist)
                             song_artists.append(artist)
 
