@@ -1,6 +1,7 @@
 from flask import Flask, Response, request, jsonify, send_file, send_from_directory
 from musiclib import MusicLibrary, Artist, Album, Song
 import os
+import sys
 from flask_cors import CORS
 from flask_compress import Compress
 import json
@@ -9,14 +10,14 @@ import datetime
 import logging
 import lrc
 
-
 app = Flask(__name__)
 CORS(app)
 Compress(app)
 
 library = MusicLibrary()
 data_file = 'library_data.json'
-static_folder='webui'
+current_dir = os.path.dirname(os.path.abspath(__file__))
+static_folder = os.path.join(current_dir, 'webui')
 
 def save_library():
     def convert_datetime(obj):

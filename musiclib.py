@@ -1,4 +1,4 @@
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
 from mutagen.easyid3 import EasyID3
 from mutagen.flac import FLAC
 import os
@@ -11,6 +11,11 @@ import subprocess
 import tempfile
 import shutil
 import opencc
+from multiprocessing import Pool, cpu_count
+from functools import lru_cache
+
+
+whitespace_re = re.compile(r'\s+')
 
 class Artist:
     def __init__(self, name):
@@ -106,13 +111,58 @@ class MusicLibrary:
         self.__dict__.update(state)
         self.cc = opencc.OpenCC('t2s')
         
-    def normalize_name(self, name):
+    def normalize_name(self, name, for_search = False):
         normalized_name = self.cc.convert(name.strip().lower())
         normalized_name = normalized_name.translate(str.maketrans(
             "ァィゥェォャュョッーアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンヴヵヶ",
             "ぁぃぅぇぉゃゅょっーあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんゔゕゖ"
         ))
+        normalized_name = re.sub(r'\s+', '', normalized_name) if for_search else normalized_name
         return normalized_name
+
+    @staticmethod
+    @lru_cache(maxsize=None)  # 使用缓存以减少重复计算
+    def normalize_name_2(name, cc):
+        normalized_name = cc.convert(name.strip().lower())
+        normalized_name = normalized_name.translate(str.maketrans(
+            "ァィゥェォャュョッーアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンヴヵヶ",
+            "ぁぃぅぇぉゃゅょっーあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんゔゕゖ"
+        ))
+        normalized_name = re.sub(r'\s+', '', normalized_name)  # 去除多余的空格
+        return normalized_name
+
+    @staticmethod
+    def combined_score(item, attribute, query, cc):
+        normalized_query = MusicLibrary.normalize_name_2(query, cc)
+        normalized_attribute = MusicLibrary.normalize_name_2(attribute, cc)
+
+        def get_match_score(normalized_query, normalized_attribute):
+            return fuzz.ratio(normalized_query, normalized_attribute)
+
+        match_score = get_match_score(normalized_query, normalized_attribute)
+        length_score = max(0, (1 - abs(len(attribute) - len(query)) / len(query)) * 100)
+        return match_score * 0.7 + length_score * 0.3
+
+    @staticmethod
+    def calculate_scores(items, attribute_getter, query, cc):
+        with Pool(cpu_count()) as pool:
+            scores = pool.starmap(
+                MusicLibrary.combined_score,
+                [(item, attribute_getter(item), query, cc) for item in items]
+            )
+        return scores
+
+    @staticmethod
+    def get_song_name(song):
+        return song.name
+
+    @staticmethod
+    def get_album_name(album):
+        return album.name
+
+    @staticmethod
+    def get_artist_name(artist):
+        return artist.name
 
     def add_song(self, song):
         self.songs[song.uuid] = song
@@ -589,36 +639,27 @@ class MusicLibrary:
     
 
     def search(self, query):
-        def get_match_score(item, attribute):
-            return fuzz.token_set_ratio(self.normalize_name(query), self.normalize_name(attribute))
+        normalized_query = self.normalize_name(query, True)
+        print(normalized_query)
+        
+        song_scores = MusicLibrary.calculate_scores(self.songs.values(), MusicLibrary.get_song_name, normalized_query, self.cc)
+        album_scores = MusicLibrary.calculate_scores(self.albums.values(), MusicLibrary.get_album_name, normalized_query, self.cc)
+        artist_scores = MusicLibrary.calculate_scores(self.artists.values(), MusicLibrary.get_artist_name, normalized_query, self.cc)
 
-        def combined_score(item, attribute):
-            match_score = get_match_score(item, attribute)
-            length_score = max(0, (1 - abs(len(attribute) - len(query)) / len(query)) * 100)
-            return match_score * 0.7 + length_score * 0.3
+        matched_songs = [(song, score) for song, score in zip(self.songs.values(), song_scores) if score > 75]
+        matched_albums = [(album, score) for album, score in zip(self.albums.values(), album_scores) if score > 75]
+        matched_artists = [(artist, score) for artist, score in zip(self.artists.values(), artist_scores) if score > 75]
 
-        normalized_query = self.normalize_name(query)
+        # Sort by score in descending order
+        matched_songs.sort(key=lambda x: x[1], reverse=True)
+        matched_albums.sort(key=lambda x: x[1], reverse=True)
+        matched_artists.sort(key=lambda x: x[1], reverse=True)
 
-        # Calculate match scores
-        matched_songs = [(song, combined_score(song, song.name)) for song in self.songs.values()]
-        matched_albums = [(album, combined_score(album, album.name)) for album in self.albums.values()]
-        matched_artists = [(artist, combined_score(artist, artist.name)) for artist in self.artists.values()]
-
-        # Filter results with score > 75 and sort by score descending
-        matched_songs = sorted([(song, score) for song, score in matched_songs if score > 75], key=lambda x: x[1], reverse=True)
-        matched_albums = sorted([(album, score) for album, score in matched_albums if score > 75], key=lambda x: x[1], reverse=True)
-        matched_artists = sorted([(artist, score) for artist, score in matched_artists if score > 75], key=lambda x: x[1], reverse=True)
-
-        # Prioritize exact matches
-        exact_songs = [song for song, score in matched_songs if self.normalize_name(song.name) == normalized_query]
-        exact_albums = [album for album, score in matched_albums if self.normalize_name(album.name) == normalized_query]
-        exact_artists = [artist for artist, score in matched_artists if self.normalize_name(artist.name) == normalized_query]
-
-        # Combine results, prioritizing exact matches
-        limited_songs = exact_songs + [song for song, score in matched_songs if song not in exact_songs][:200 - len(exact_songs)]
-        limited_albums = exact_albums + [album for album, score in matched_albums if album not in exact_albums][:50 - len(exact_albums)]
-        limited_artists = exact_artists + [artist for artist, score in matched_artists if artist not in exact_artists][:50 - len(exact_artists)]
-
+        # Limit the results
+        limited_songs = [song for song, score in matched_songs[:200]]
+        limited_albums = [album for album, score in matched_albums[:50]]
+        limited_artists = [artist for artist, score in matched_artists[:50]]
+        
         return {
             'songs': limited_songs,
             'albums': limited_albums,
