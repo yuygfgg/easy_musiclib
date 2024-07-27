@@ -111,6 +111,7 @@ class MusicLibrary:
         self.__dict__.update(state)
         self.cc = opencc.OpenCC('t2s')
         
+    @lru_cache(maxsize=None)
     def normalize_name(self, name, for_search = False):
         normalized_name = self.cc.convert(name.strip().lower())
         normalized_name = normalized_name.translate(str.maketrans(
@@ -121,7 +122,7 @@ class MusicLibrary:
         return normalized_name
 
     @staticmethod
-    @lru_cache(maxsize=None)  # 使用缓存以减少重复计算
+    @lru_cache(maxsize=None)
     def normalize_name_2(name, cc):
         normalized_name = cc.convert(name.strip().lower())
         normalized_name = normalized_name.translate(str.maketrans(
@@ -212,6 +213,7 @@ class MusicLibrary:
     def goto_song(self, song_uuid):
         return self.songs.get(song_uuid, None)
     
+    @lru_cache(maxsize=None)
     def scan(self, directory):
         scanned_count = 0
         for root, dirs, files in os.walk(directory):
@@ -252,7 +254,10 @@ class MusicLibrary:
                                 self.add_artist(artist)
                             song_artists.append(artist)
 
-                        song = Song(song_name, album, song_artists, file_path, track_number, disc_number, year)
+                        
+                        song_art_path = album.album_art_path if album and album.album_art_path else None
+                        
+                        song = Song(song_name, album, song_artists, file_path, track_number, disc_number, year, song_art_path)
                         self.add_song(song)
                         album.songs.append(song)
 
@@ -439,6 +444,7 @@ class MusicLibrary:
             'disc_number': disc_number,
             'year': year
         }
+    
     def split_and_clean(self, text, delimiters):
         temp_artists = [text]
         for delimiter in delimiters:
@@ -556,6 +562,7 @@ class MusicLibrary:
         self.merge_artist_by_uuid(uuid1, uuid2)
         print(f"Artist {name2} merged into {name1}.")
     
+    @lru_cache(maxsize=None)
     def extract_year(self, date_string):
         if date_string:
             match = re.search(r'\b(\d{4})\b', date_string)
