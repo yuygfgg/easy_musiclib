@@ -126,21 +126,23 @@ def load_library():
             except Exception as e:
                 logger.error(f"Failed to restore albums: {e}")
                 raise
-
+            restored_songs = 0
             # Restore songs
             try:
                 for uuid, song_data in data['songs'].items():
+                    restored_songs += 1
+                    if (restored_songs % 250) == 0:
+                        print(f"restored {restored_songs} songs")
                     parse_datetime(song_data, ['liked_time'])
                     album = library.albums[song_data['album']]
                     artists = [library.artists[artist_uuid] for artist_uuid in song_data['artists']]
                     song = Song(
                         song_data['name'], album, artists, song_data['file_path'],
-                        song_data['track_number'], song_data['disc_number'], song_data['year']
+                        song_data['track_number'], song_data['disc_number'], song_data['year'], song_data.get('song_art_path')
                     )
                     song.uuid = song_data['uuid']
                     song.is_liked = song_data['is_liked']
                     song.liked_time = song_data.get('liked_time')
-                    song.song_art_path = song_data.get('song_art_path')
 
                     if song_data['file_path'] is None:
                         logger.warning(f"File path is None for song: {song_data['name']} (UUID: {song_data['uuid']})")
@@ -538,4 +540,4 @@ def serve_static(path):
 
 if __name__ == '__main__':
     load_library()
-    app.run(debug=True, port=5010, host='0.0.0.0')
+    app.run(debug=False, port=5010, host='0.0.0.0')

@@ -57,7 +57,7 @@ class Album:
                     break
 
 class Song:
-    def __init__(self, name, album, artists, file_path, track_number=1, disc_number=1, year=None):
+    def __init__(self, name, album, artists, file_path, track_number=1, disc_number=1, year=None, song_art_path=None):
         self.name = name
         self.uuid = str(uuid.uuid4())
         self.album = {'name': album.name, 'uuid': album.uuid}
@@ -67,7 +67,7 @@ class Song:
         self.disc_number = disc_number
         self.is_liked = False
         self.liked_time = None
-        self.song_art_path = self.find_art_path(file_path)
+        self.song_art_path = self.song_art_path = song_art_path or self.find_art_path(file_path)
         self.year = year
 
     def find_art_path(self, file_path):
@@ -586,15 +586,43 @@ class MusicLibrary:
         else:
             print(f"Album {uuid} not found.")
     
+    
+
     def search(self, query):
-        matched_songs = [song for song in self.songs.values() if fuzz.partial_ratio(self.normalize_name(query), self.normalize_name(song.name)) > 75]
-        matched_albums = [album for album in self.albums.values() if fuzz.partial_ratio(self.normalize_name(query), self.normalize_name(album.name)) > 75]
-        matched_artists = [artist for artist in self.artists.values() if fuzz.partial_ratio(self.normalize_name(query), self.normalize_name(artist.name)) > 75]
-        
+        def get_match_score(item, attribute):
+            return fuzz.token_set_ratio(self.normalize_name(query), self.normalize_name(attribute))
+
+        def combined_score(item, attribute):
+            match_score = get_match_score(item, attribute)
+            length_score = max(0, (1 - abs(len(attribute) - len(query)) / len(query)) * 100)
+            return match_score * 0.7 + length_score * 0.3
+
+        normalized_query = self.normalize_name(query)
+
+        # Calculate match scores
+        matched_songs = [(song, combined_score(song, song.name)) for song in self.songs.values()]
+        matched_albums = [(album, combined_score(album, album.name)) for album in self.albums.values()]
+        matched_artists = [(artist, combined_score(artist, artist.name)) for artist in self.artists.values()]
+
+        # Filter results with score > 75 and sort by score descending
+        matched_songs = sorted([(song, score) for song, score in matched_songs if score > 75], key=lambda x: x[1], reverse=True)
+        matched_albums = sorted([(album, score) for album, score in matched_albums if score > 75], key=lambda x: x[1], reverse=True)
+        matched_artists = sorted([(artist, score) for artist, score in matched_artists if score > 75], key=lambda x: x[1], reverse=True)
+
+        # Prioritize exact matches
+        exact_songs = [song for song, score in matched_songs if self.normalize_name(song.name) == normalized_query]
+        exact_albums = [album for album, score in matched_albums if self.normalize_name(album.name) == normalized_query]
+        exact_artists = [artist for artist, score in matched_artists if self.normalize_name(artist.name) == normalized_query]
+
+        # Combine results, prioritizing exact matches
+        limited_songs = exact_songs + [song for song, score in matched_songs if song not in exact_songs][:200 - len(exact_songs)]
+        limited_albums = exact_albums + [album for album, score in matched_albums if album not in exact_albums][:50 - len(exact_albums)]
+        limited_artists = exact_artists + [artist for artist, score in matched_artists if artist not in exact_artists][:50 - len(exact_artists)]
+
         return {
-            'songs': matched_songs,
-            'albums': matched_albums,
-            'artists': matched_artists
+            'songs': limited_songs,
+            'albums': limited_albums,
+            'artists': limited_artists
         }
     
     def build_graph(self):
