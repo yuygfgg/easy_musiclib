@@ -189,9 +189,10 @@ class MusicLibrary:
         return None
     
     def find_album_by_name_artist_year(self, name, album_artist_names, year):
+        album_artist_names = {self.normalize_name(album_artist_name) for album_artist_name in album_artist_names}
         for album in self.albums.values():
-            album_artist_names_set = {artist.name for artist in album.album_artists}
-            if (album.name == name and 
+            album_artist_names_set = {self.normalize_name(artist.name) for artist in album.album_artists}
+            if (self.normalize_name(album.name) == self.normalize_name(name) and 
                 (album.year == year or (album.year is None and year is None)) and
                 (album_artist_names_set == set(album_artist_names) or (not album_artist_names and not album.album_artists))):
                 return album
@@ -255,7 +256,7 @@ class MusicLibrary:
                             song_artists.append(artist)
 
                         
-                        song_art_path = album.album_art_path if album and album.album_art_path else None
+                        song_art_path = album.album_art_path if album.album_art_path else None
                         
                         song = Song(song_name, album, song_artists, file_path, track_number, disc_number, year, song_art_path)
                         self.add_song(song)
