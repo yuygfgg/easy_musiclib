@@ -133,7 +133,8 @@ class MusicLibrary:
         return normalized_name
 
     @staticmethod
-    def combined_score(item, attribute, query, cc):
+    @lru_cache(maxsize=None)
+    def combined_score(attribute, query, cc):
         normalized_query = MusicLibrary.normalize_name_2(query, cc)
         normalized_attribute = MusicLibrary.normalize_name_2(attribute, cc)
 
@@ -149,10 +150,10 @@ class MusicLibrary:
         with Pool(cpu_count()) as pool:
             scores = pool.starmap(
                 MusicLibrary.combined_score,
-                [(item, attribute_getter(item), query, cc) for item in items]
+                [(attribute_getter(item), query, cc) for item in items]
             )
         return scores
-
+    
     @staticmethod
     def get_song_name(song):
         return song.name
@@ -174,6 +175,7 @@ class MusicLibrary:
     def add_artist(self, artist):
         self.artists[artist.uuid] = artist
 
+    @lru_cache(maxsize=None)
     def find_artist_by_name(self, name):
         normalized_name = self.normalize_name(name)
         for artist in self.artists.values():
@@ -188,13 +190,14 @@ class MusicLibrary:
                 return album
         return None
     
+    @lru_cache(maxsize=None)
     def find_album_by_name_artist_year(self, name, album_artist_names, year):
-        album_artist_names = {self.normalize_name(album_artist_name) for album_artist_name in album_artist_names}
+        album_artist_names_set = {self.normalize_name(album_artist_name) for album_artist_name in album_artist_names}
         for album in self.albums.values():
-            album_artist_names_set = {self.normalize_name(artist.name) for artist in album.album_artists}
+            album_artist_names_set_in_album = {self.normalize_name(artist.name) for artist in album.album_artists}
             if (self.normalize_name(album.name) == self.normalize_name(name) and 
                 (album.year == year or (album.year is None and year is None)) and
-                (album_artist_names_set == set(album_artist_names) or (not album_artist_names and not album.album_artists))):
+                (album_artist_names_set == album_artist_names_set_in_album or (not album_artist_names and not album.album_artists))):
                 return album
         return None
 
@@ -234,15 +237,18 @@ class MusicLibrary:
                         disc_number = id3_tags['disc_number']
                         year = id3_tags['year']
 
-                        album = self.find_album_by_name_artist_year(album_name, album_artist_names, year)
+                        album_artist_names_tuple = tuple(album_artist_names)
+                        album = self.find_album_by_name_artist_year(album_name, album_artist_names_tuple, year)
                         if not album:
                             print(f"Adding new album {album_name} because it doesn't exist now.")
                             album = Album(album_name)
+                            self.find_album_by_name_artist_year.cache_clear()
                             album.year = year
                             for artist_name in album_artist_names:
                                 artist = self.find_artist_by_name(artist_name)
                                 if not artist:
                                     artist = Artist(artist_name)
+                                    self.find_artist_by_name.cache_clear()
                                     self.add_artist(artist)
                                 album.album_artists.add(artist)
                             self.add_album(album)
@@ -252,6 +258,7 @@ class MusicLibrary:
                             artist = self.find_artist_by_name(artist_name)
                             if not artist:
                                 artist = Artist(artist_name)
+                                self.find_artist_by_name.cache_clear()
                                 self.add_artist(artist)
                             song_artists.append(artist)
 
@@ -380,6 +387,7 @@ class MusicLibrary:
 
     def parse_artists(self, title, album, artists, track_number=1, disc_number=1, album_artists=None, year=None):
         delimiters = ['/', '／', '&', '＆', ' x ', ';', '；', ',', '，', '×', '　', '、']
+        delimiters = tuple(delimiters)
         ignore = ['cool&create']
         ignore_normalized = [self.normalize_name(item) for item in ignore]
         parsed_artists = []
@@ -446,6 +454,7 @@ class MusicLibrary:
             'year': year
         }
     
+    @lru_cache(maxsize=None)
     def split_and_clean(self, text, delimiters):
         temp_artists = [text]
         for delimiter in delimiters:
@@ -562,8 +571,7 @@ class MusicLibrary:
 
         self.merge_artist_by_uuid(uuid1, uuid2)
         print(f"Artist {name2} merged into {name1}.")
-    
-    @lru_cache(maxsize=None)
+
     def extract_year(self, date_string):
         if date_string:
             match = re.search(r'\b(\d{4})\b', date_string)
@@ -644,8 +652,7 @@ class MusicLibrary:
         else:
             print(f"Album {uuid} not found.")
     
-    
-
+    @lru_cache(maxsize=None)
     def search(self, query):
         normalized_query = self.normalize_name(query, True)
         print(normalized_query)
