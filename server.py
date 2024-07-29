@@ -1,3 +1,4 @@
+import threading
 from flask import Flask, Response, request, jsonify, send_file, send_from_directory
 from musiclib import MusicLibrary, Artist, Album, Song
 import os
@@ -5,6 +6,7 @@ import sys
 from flask_cors import CORS
 from flask_compress import Compress
 import json
+import orjson
 import opencc
 import datetime
 import logging
@@ -20,6 +22,10 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 static_folder = os.path.join(current_dir, 'webui')
 
 def save_library():
+    thread = threading.Thread(target=do_save_library)
+    thread.start()
+
+def do_save_library():
     def convert_datetime(obj):
         if isinstance(obj, datetime.datetime):
             return obj.isoformat()
@@ -48,7 +54,6 @@ def save_library():
             'album': song.album['uuid'],
             'artists': [artist['uuid'] for artist in song.artists]
         }) for uuid, song in library.songs.items()},
-        'graph': serialize_data(library.graph)  # Convert sets to lists for JSON serialization
     }
     try: 
         os.remove(data_file)
@@ -56,8 +61,8 @@ def save_library():
         print(e)
     
     try:
-        with open(data_file, 'w', encoding='utf-8') as file:
-            json.dump(data, file, ensure_ascii=False, indent=4, default=convert_datetime)
+        with open(data_file, 'wb') as file:
+            file.write(orjson.dumps(data, default=convert_datetime))
         print("Library saved to file")
     except Exception as e:
         print(f"Failed to save library to file: {e}")
@@ -160,7 +165,8 @@ def load_library():
 
             # Restore graph
             try:
-                library.graph = {k: {kk: {'strength': vv['strength'], 'details': set(vv['details'])} for kk, vv in v.items()} for k, v in data.get('graph', {}).items()}
+                # library.graph = {k: {kk: {'strength': vv['strength'], 'details': set(vv['details'])} for kk, vv in v.items()} for k, v in data.get('graph', {}).items()}
+                library.graph = library.build_graph()
                 logger.debug("Restored graph")
             except Exception as e:
                 logger.error(f"Failed to restore graph: {e}")
