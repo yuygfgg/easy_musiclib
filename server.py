@@ -125,6 +125,7 @@ def load_library():
                     album.liked_time = album_data.get('liked_time')
                     album.album_art_path = album_data['album_art_path']
                     album.year = album_data['year']
+                    album.event = album_data['event']
                     album.album_artists = {library.artists[artist_uuid] for artist_uuid in album_data['album_artists']}
                     album.songs = []
                     library.albums[uuid] = album
@@ -144,7 +145,7 @@ def load_library():
                     artists = [library.artists[artist_uuid] for artist_uuid in song_data['artists']]
                     song = Song(
                         song_data['name'], album, artists, song_data['file_path'],
-                        song_data['track_number'], song_data['disc_number'], song_data['year'], song_data.get('song_art_path')
+                        song_data['track_number'], song_data['disc_number'], song_data['year'], song_data.get('song_art_path'), song_data.get('event')
                     )
                     song.uuid = song_data['uuid']
                     song.is_liked = song_data['is_liked']
@@ -374,7 +375,8 @@ def show_song(uuid):
             'is_liked': song.is_liked,
             'liked_time': song.liked_time,
             'song_art_path': song.song_art_path,
-            'year': song.year
+            'year': song.year,
+            'event': song.event
         }), 200
     return jsonify({'message': 'Song not found'}), 404
 
@@ -390,7 +392,8 @@ def show_album(uuid):
             'is_liked': album.is_liked,
             'liked_time': album.liked_time,
             'album_art_path': album.album_art_path,
-            'year': album.year
+            'year': album.year,
+            'event': album.event
         }), 200
     return jsonify({'message': 'Album not found'}), 404
 

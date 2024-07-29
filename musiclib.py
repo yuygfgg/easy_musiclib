@@ -44,6 +44,7 @@ class Album:
         self.liked_time = None
         self.album_art_path = ""
         self.year = None
+        self.event = None
 
     def like(self):
         self.is_liked = True
@@ -60,9 +61,16 @@ class Album:
                 if song.year:
                     self.year = song.year
                     break
+    
+    def update_event(self):
+        if not self.event and self.songs:
+            for song in self.songs:
+                if song.event:
+                    self.event = song.event
+                    break
 
 class Song:
-    def __init__(self, name, album, artists, file_path, track_number=1, disc_number=1, year=None, song_art_path=None):
+    def __init__(self, name, album, artists, file_path, track_number=1, disc_number=1, year=None, song_art_path=None, event=None):
         self.name = name
         self.uuid = str(uuid.uuid4())
         self.album = {'name': album.name, 'uuid': album.uuid}
@@ -74,6 +82,7 @@ class Song:
         self.liked_time = None
         self.song_art_path = self.song_art_path = song_art_path or self.find_art_path(file_path)
         self.year = year
+        self.event = event
 
     @lru_cache(maxsize=None)
     def generate_possible_art_files(self):
@@ -259,6 +268,7 @@ class MusicLibrary:
             track_number = id3_tags['track_number']
             disc_number = id3_tags['disc_number']
             year = id3_tags['year']
+            event = id3_tags['event']
 
             album_artist_names_tuple = tuple(album_artist_names)
             album = self.find_album_by_name_artist_year(album_name, album_artist_names_tuple, year)
@@ -287,7 +297,7 @@ class MusicLibrary:
 
             song_art_path = album.album_art_path if album.album_art_path else None
 
-            song = Song(song_name, album, song_artists, file_path, track_number, disc_number, year, song_art_path)
+            song = Song(song_name, album, song_artists, file_path, track_number, disc_number, year, song_art_path, event)
             self.add_song(song)
             album.songs.append(song)
 
@@ -301,6 +311,7 @@ class MusicLibrary:
                                 s.song_art_path = album.album_art_path
 
             album.update_year()
+            album.update_event()
 
             for artist in album.album_artists:
                 if not artist.artist_art_path:
@@ -349,6 +360,7 @@ class MusicLibrary:
         title = audio.get('title', ['Unknown Title'])[0]
         album = audio.get('album', ['Unknown Album'])[0]
         artists = audio.get('artist', ['Unknown Artist'])
+        event = audio.get('event', ['Unknow Event'])
         if isinstance(artists, str):
             artists = [artists]
 
@@ -373,9 +385,9 @@ class MusicLibrary:
         year = audio.get('date', [None])[0] or audio.get('year', [None])[0]
         year = self.extract_year(year)
 
-        return self.parse_artists(title, album, artists, track_number, disc_number, album_artists, year)
+        return self.parse_artists(title, album, artists, track_number, disc_number, album_artists, year, event)
 
-    def parse_artists(self, title, album, artists, track_number=1, disc_number=1, album_artists=None, year=None):
+    def parse_artists(self, title, album, artists, track_number=1, disc_number=1, album_artists=None, year=None, event = None):
         delimiters = ['/', '／', '&', '＆', ' x ', ';', '；', ',', '，', '×', '　', '、']
         delimiters = tuple(delimiters)
         ignore = ['cool&create']
@@ -441,7 +453,8 @@ class MusicLibrary:
             'album_artists': parsed_album_artists,
             'track_number': track_number,
             'disc_number': disc_number,
-            'year': year
+            'year': year,
+            'event': event
         }
     
     @lru_cache(maxsize=None)

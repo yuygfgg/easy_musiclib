@@ -86,6 +86,7 @@
             <div class="col-md-8">
                 <h1 id="album-name">专辑名称</h1>
                 <p id="album-year">年代:</p>
+                <p id="album-event">Event:</p>
                 <div id="album-artists" class="mb-3"></div>
                 <div id="album-like" class="liked"></div>
             </div>
@@ -158,6 +159,9 @@
             document.getElementById(
                 "album-year"
             ).textContent = `年代: ${album.year}`;
+            document.getElementById(
+                "album-event"
+            ).textContent = `Event: ${album.event}`;
             updateAlbumLikeButton(album);
 
             const albumArtists = document.getElementById("album-artists");

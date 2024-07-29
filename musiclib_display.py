@@ -15,6 +15,8 @@ class MusicLibraryDisplay:
         print(f"Disc Number: {song.disc_number}")
         print(f"Song Art Path: {song.song_art_path}")
         print(f"Isliked: {song.is_liked}")
+        print(f"Year: {song.year}")
+        print(f"Event: {song.event}")
         print("------------end song information------------")
 
     def show_albuminfo(self, album):
@@ -29,6 +31,8 @@ class MusicLibraryDisplay:
             print(f"  - {song.name} (UUID: {song.uuid}, Track: {song.track_number}, Disc: {song.disc_number})")
         print(f"Album Art Path: {album.album_art_path}")
         print(f"Isliked: {album.is_liked}")
+        print(f"Year: {album.year}")
+        print(f"Event: {album.event}")
         print("------------end album information------------")
 
     def show_artistinfo(self, artist):
