@@ -1,5 +1,5 @@
+import itertools
 from rapidfuzz import fuzz
-from mutagen.easyid3 import EasyID3
 from mutagen.flac import FLAC
 import os
 import csv
@@ -75,12 +75,30 @@ class Song:
         self.song_art_path = self.song_art_path = song_art_path or self.find_art_path(file_path)
         self.year = year
 
+    @lru_cache(maxsize=None)
+    def generate_possible_art_files(self):
+        art_files = ['folder.jpg', 'cover.jpg', 'folder.png', 'cover.png', 
+                    'folder.tif', 'cover.tif', 'folder.tiff', 'cover.tiff', 
+                    'folder.jpeg', 'cover.jpeg']
+        
+        possible_files = set()
+        for art_file in art_files:
+            # 生成所有可能的大小写组合
+            base_name, ext = os.path.splitext(art_file)
+            for combo in itertools.product(*((char.lower(), char.upper()) for char in base_name)):
+                possible_files.add(''.join(combo) + ext.lower())
+        
+        return possible_files
+
     def find_art_path(self, file_path):
         folder_path = os.path.dirname(file_path)
-        for art_file in ['folder.jpg', 'cover.jpg', 'folder.png', 'cover.png', 'folder.tif', 'cover.tif', 'folder.tiff', 'cover.tiff', 'folder.jpeg', 'cover.jpeg']:
+        possible_files = self.generate_possible_art_files()
+        
+        for art_file in possible_files:
             art_path = os.path.join(folder_path, art_file)
             if os.path.isfile(art_path):
                 return art_path
+        
         return ""
 
     def like(self):
@@ -195,9 +213,9 @@ class MusicLibrary:
         album_artist_names_set = {self.normalize_name(album_artist_name) for album_artist_name in album_artist_names}
         for album in self.albums.values():
             album_artist_names_set_in_album = {self.normalize_name(artist.name) for artist in album.album_artists}
-            if (self.normalize_name(album.name) == self.normalize_name(name) and 
-                (album.year == year or (album.year is None and year is None)) and
-                (album_artist_names_set == album_artist_names_set_in_album or (not album_artist_names and not album.album_artists))):
+            if ((self.normalize_name(album.name) == self.normalize_name(name) or album.name is None or name is None) and
+                (album.year == year or album.year is None or year is None) and
+                (album_artist_names_set == album_artist_names_set_in_album or not album_artist_names or not album.album_artists)):
                 return album
         return None
 
@@ -217,91 +235,91 @@ class MusicLibrary:
     def goto_song(self, song_uuid):
         return self.songs.get(song_uuid, None)
     
-    @lru_cache(maxsize=None)
     def scan(self, directory):
         scanned_count = 0
         for root, dirs, files in os.walk(directory):
             for file in files:
-                if file.endswith(".mp3") or file.endswith(".flac"):
+                if file.endswith(".flac"):
                     scanned_count += 1
                     if scanned_count % 250 == 0:
                         print(f"Scanned {scanned_count} files.")
-                    try:
-                        file_path = os.path.join(root, file)
-                        id3_tags = self.extract_id3_tags(file_path)
-                        song_name = id3_tags['title'].strip()
-                        album_name = id3_tags['album'].strip()
-                        artist_names = [name.strip() for name in id3_tags['artists']]
-                        album_artist_names = [name.strip() for name in id3_tags.get('album_artists', artist_names)]
-                        track_number = id3_tags['track_number']
-                        disc_number = id3_tags['disc_number']
-                        year = id3_tags['year']
-
-                        album_artist_names_tuple = tuple(album_artist_names)
-                        album = self.find_album_by_name_artist_year(album_name, album_artist_names_tuple, year)
-                        if not album:
-                            print(f"Adding new album {album_name} because it doesn't exist now.")
-                            album = Album(album_name)
-                            self.find_album_by_name_artist_year.cache_clear()
-                            album.year = year
-                            for artist_name in album_artist_names:
-                                artist = self.find_artist_by_name(artist_name)
-                                if not artist:
-                                    artist = Artist(artist_name)
-                                    self.find_artist_by_name.cache_clear()
-                                    self.add_artist(artist)
-                                album.album_artists.add(artist)
-                            self.add_album(album)
-
-                        song_artists = []
-                        for artist_name in artist_names:
-                            artist = self.find_artist_by_name(artist_name)
-                            if not artist:
-                                artist = Artist(artist_name)
-                                self.find_artist_by_name.cache_clear()
-                                self.add_artist(artist)
-                            song_artists.append(artist)
-
-                        
-                        song_art_path = album.album_art_path if album.album_art_path else None
-                        
-                        song = Song(song_name, album, song_artists, file_path, track_number, disc_number, year, song_art_path)
-                        self.add_song(song)
-                        album.songs.append(song)
-
-                        if not album.album_art_path:
-                            album.album_art_path = song.song_art_path
-                            if not album.album_art_path:
-                                album.album_art_path = self.extract_embedded_art(song.file_path)
-                                if album.album_art_path:
-                                    for s in album.songs:
-                                        if not s.song_art_path:
-                                            s.song_art_path = album.album_art_path
-
-                        album.update_year()
-
-                        for artist in album.album_artists:
-                            if not artist.artist_art_path:
-                                artist.artist_art_path = album.album_art_path
-
-                        for artist in song_artists:
-                            if not artist.artist_art_path:
-                                artist.artist_art_path = album.album_art_path
-                                if not artist.artist_art_path:
-                                    artist.artist_art_path = song.song_art_path
-
-                    except Exception as e:
-                        print(f"Error processing file {file_path}: {e}")
-                        continue
+                    file_path = os.path.join(root, file)
+                    self.scan_file(file_path)
         self.graph = self.build_graph()
         self.auto_merge()
 
+    @lru_cache(maxsize=None)
+    def scan_file(self, file_path):
+        try:
+            id3_tags = self.extract_id3_tags(file_path)
+            song_name = id3_tags['title'].strip()
+            album_name = id3_tags['album'].strip()
+            artist_names = [name.strip() for name in id3_tags['artists']]
+            album_artist_names = [name.strip() for name in id3_tags.get('album_artists', artist_names)]
+            track_number = id3_tags['track_number']
+            disc_number = id3_tags['disc_number']
+            year = id3_tags['year']
+
+            album_artist_names_tuple = tuple(album_artist_names)
+            album = self.find_album_by_name_artist_year(album_name, album_artist_names_tuple, year)
+            if not album:
+                print(f"Adding new album {album_name} because it doesn't exist now.")
+                album = Album(album_name)
+                self.find_album_by_name_artist_year.cache_clear()
+                album.year = year
+                for artist_name in album_artist_names:
+                    artist = self.find_artist_by_name(artist_name)
+                    if not artist:
+                        artist = Artist(artist_name)
+                        self.find_artist_by_name.cache_clear()
+                        self.add_artist(artist)
+                    album.album_artists.add(artist)
+                self.add_album(album)
+
+            song_artists = []
+            for artist_name in artist_names:
+                artist = self.find_artist_by_name(artist_name)
+                if not artist:
+                    artist = Artist(artist_name)
+                    self.find_artist_by_name.cache_clear()
+                    self.add_artist(artist)
+                song_artists.append(artist)
+
+            song_art_path = album.album_art_path if album.album_art_path else None
+
+            song = Song(song_name, album, song_artists, file_path, track_number, disc_number, year, song_art_path)
+            self.add_song(song)
+            album.songs.append(song)
+
+            if not album.album_art_path:
+                album.album_art_path = song.song_art_path
+                if not album.album_art_path:
+                    album.album_art_path = self.extract_embedded_art(song.file_path)
+                    if album.album_art_path:
+                        for s in album.songs:
+                            if not s.song_art_path:
+                                s.song_art_path = album.album_art_path
+
+            album.update_year()
+
+            for artist in album.album_artists:
+                if not artist.artist_art_path:
+                    artist.artist_art_path = album.album_art_path
+
+            for artist in song_artists:
+                if not artist.artist_art_path:
+                    artist.artist_art_path = album.album_art_path
+                    if not artist.artist_art_path:
+                        artist.artist_art_path = song.song_art_path
+
+        except Exception as e:
+            print(f"Error processing file {file_path}: {e}")
+            return
+
     def extract_id3_tags(self, file_path):
         file_extension = os.path.splitext(file_path)[1].lower()
-
-        if file_extension == '.mp3':
-            return self.extract_mp3_tags(file_path)
-        elif file_extension == '.flac':
+        
+        if file_extension == '.flac':
             return self.extract_flac_tags(file_path)
         else:
             print(f"Unsupported file format: {file_extension}")
@@ -313,34 +331,6 @@ class MusicLibrary:
                 'disc_number': 1,
                 'year': None
             }
-
-    def extract_mp3_tags(self, file_path):
-        try:
-            audio = EasyID3(file_path)
-        except Exception as e:
-            print(f"Error reading ID3 tags from {file_path}: {e}")
-            return {
-                'title': 'Unknown Title',
-                'album': 'Unknown Album',
-                'artists': ['Unknown Artist'],
-                'track_number': 1,
-                'disc_number': 1,
-                'year': None
-            }
-
-        title = audio.get('title', ['Unknown Title'])[0]
-        album = audio.get('album', ['Unknown Album'])[0]
-        artists = audio.get('artist', ['Unknown Artist'])
-        if isinstance(artists, str):
-            artists = [artists]
-            
-        track_number = int(audio.get('tracknumber', ['1'])[0].split('/')[0])
-        disc_number = int(audio.get('discnumber', ['1'])[0].split('/')[0])
-
-        year = audio.get('date', [None])[0] or audio.get('year', [None])[0]
-        year = self.extract_year(year)
-
-        return self.parse_artists(title, album, artists, track_number, disc_number, year=year)
 
     def extract_flac_tags(self, file_path):
         try:
