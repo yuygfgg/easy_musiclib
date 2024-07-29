@@ -239,7 +239,7 @@
         }
 
         .close-popup {
-            position: fixed;
+            position: absolute;
             top: 10px;
             right: 10px;
             background: none;
@@ -252,7 +252,8 @@
 
         .song-popup .right-section .settings {
             position: relative;
-            text-align: right;
+            text-align: left;
+            margin-top: 10px;
         }
 
         .song-popup .right-section .settings button {
@@ -793,8 +794,6 @@
 
                     // 检查是否有返回结果
                     if (data.length > 0) {
-                        // 默认显示第一个歌词
-                        selectLyrics(data[0].lyrics);
 
                         // 显示歌词选项
                         data.forEach((option) => {
@@ -908,13 +907,10 @@
 
             hiddenIframe.onload = function () {
                 hiddenIframe.contentWindow.currentIndex = visibleIframe.contentWindow.currentIndex;
-
-                // 发送播放请求到隐藏 iframe
             };
             // 同步隐藏 iframe 的 URL
             hiddenIframe.src = visibleIframe.src;
 
-            // 发送播放请求到隐藏 iframe
             playSong(song);
         }
 
@@ -1028,6 +1024,9 @@
             if (isPlaying) {
                 audioPlayer.pause();
                 isPlaying = false;
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.metadata.title = document.getElementById("popup-title").textContent;// restore to song title
+                }
             } else {
                 audioPlayer.play();
                 isPlaying = true;
