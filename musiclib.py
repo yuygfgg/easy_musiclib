@@ -218,8 +218,11 @@ class MusicLibrary:
         return None
     
     @lru_cache(maxsize=None)
-    def find_album_by_name_artist_year(self, name, album_artist_names, year):
+    def find_album_by_name_artist_year(self, name, album_artist_names, year, album_artist_tag):
         album_artist_names_set = {self.normalize_name(album_artist_name) for album_artist_name in album_artist_names}
+        if not album_artist_tag:
+            album_artist_names = None
+            album_artist_names_set = None
         for album in self.albums.values():
             album_artist_names_set_in_album = {self.normalize_name(artist.name) for artist in album.album_artists}
             if ((self.normalize_name(album.name) == self.normalize_name(name) or album.name is None or name is None) and
@@ -260,18 +263,21 @@ class MusicLibrary:
     @lru_cache(maxsize=None)
     def scan_file(self, file_path):
         try:
+            album_artist_tag = True
             id3_tags = self.extract_id3_tags(file_path)
             song_name = id3_tags['title'].strip()
             album_name = id3_tags['album'].strip()
             artist_names = [name.strip() for name in id3_tags['artists']]
             album_artist_names = [name.strip() for name in id3_tags.get('album_artists', artist_names)]
+            if album_artist_names == artist_names:
+                album_artist_tag = False
             track_number = id3_tags['track_number']
             disc_number = id3_tags['disc_number']
             year = id3_tags['year']
             event = id3_tags['event']
 
             album_artist_names_tuple = tuple(album_artist_names)
-            album = self.find_album_by_name_artist_year(album_name, album_artist_names_tuple, year)
+            album = self.find_album_by_name_artist_year(album_name, album_artist_names_tuple, year, album_artist_tag)
             if not album:
                 print(f"Adding new album {album_name} because it doesn't exist now.")
                 album = Album(album_name)
