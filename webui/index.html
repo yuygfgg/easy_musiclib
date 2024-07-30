@@ -822,6 +822,9 @@
             if (currentSongUUID) {
                 localStorage.setItem(`lyrics_${currentSongUUID}`, lyrics);
             }
+            const currentTime = audioPlayer.currentTime * 1000; // 转换为毫秒
+            lrc.play(currentTime);
+            lrc.pause();
         }
         function closeSongPopup() {
             document.getElementById("song-popup").style.display = "none";
