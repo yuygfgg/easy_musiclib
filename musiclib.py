@@ -664,9 +664,9 @@ class MusicLibrary:
         album_scores = MusicLibrary.calculate_scores(self.albums.values(), MusicLibrary.get_album_name, normalized_query, self.cc)
         artist_scores = MusicLibrary.calculate_scores(self.artists.values(), MusicLibrary.get_artist_name, normalized_query, self.cc)
 
-        matched_songs = [(song, score) for song, score in zip(self.songs.values(), song_scores) if score > 75]
-        matched_albums = [(album, score) for album, score in zip(self.albums.values(), album_scores) if score > 75]
-        matched_artists = [(artist, score) for artist, score in zip(self.artists.values(), artist_scores) if score > 75]
+        matched_songs = [(song, score) for song, score in zip(self.songs.values(), song_scores) if score > 50]
+        matched_albums = [(album, score) for album, score in zip(self.albums.values(), album_scores) if score > 50]
+        matched_artists = [(artist, score) for artist, score in zip(self.artists.values(), artist_scores) if score > 50]
 
         # Sort by score in descending order
         matched_songs.sort(key=lambda x: x[1], reverse=True)

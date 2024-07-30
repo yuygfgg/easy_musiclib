@@ -580,7 +580,7 @@
             if (currentSongUUID) {
                 localStorage.setItem(`lyrics_disabled_${currentSongUUID}`, 'true');
                 document.getElementById("popup-lyrics").textContent = "Disabled";
-                lrc.pause;
+                lrc.pause();
                 lrc = null;
             }
         }
@@ -655,8 +655,6 @@
 
         function updateLyricsDisplay(line, text) {
             const lyricsContainer = document.getElementById("popup-lyrics");
-            const originalText = lrc.lines[line].text;
-            const translatedText = lrc.lines[line].extendedLyrics[0] || '';
 
             const lyricsHtml = lrc.lines.map((lineObj, index) => {
                 const isCurrent = index === line;
