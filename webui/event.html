@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        .album-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .album-art {
+            width: 50px;
+            height: 50px;
+            margin-right: 1rem;
+        }
+        .clickable {
+            cursor: pointer;
+            color: blue;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="my-4">Event Details</h1>
+        <div id="album-list" class="row"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const uuid = urlParams.get('uuid');
+            const apiBaseurl = urlParams.get('apiBaseurl');
+
+            if (!uuid || !apiBaseurl) {
+                alert('UUID and API Base URL are required');
+                return;
+            }
+
+            fetch(`${apiBaseurl}/api/show_event/${uuid}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.albums) {
+                        data.albums.forEach(album => {
+                            const albumItem = document.createElement('div');
+                            albumItem.className = 'col-md-4 album-item';
+
+                            const albumArtUrl = album.album_art_path ? `${apiBaseurl}/api/getfile?file_path=${encodeURIComponent(album.album_art_path)}` : 'default_album.png';
+
+                            const albumArt = document.createElement('img');
+                            albumArt.src = albumArtUrl;
+                            albumArt.alt = 'Album Art';
+                            albumArt.className = 'album-art';
+
+                            const albumInfo = document.createElement('div');
+
+                            const albumName = document.createElement('div');
+                            albumName.className = 'clickable';
+                            albumName.textContent = album.name;
+                            albumName.onclick = function() {
+                                handleAlbumClick(album.uuid);
+                            };
+
+                            const albumArtist = document.createElement('div');
+                            albumArtist.className = 'clickable';
+                            albumArtist.textContent = album.album_artists[0].name;
+                            albumArtist.onclick = function() {
+                                handleArtistClick(album.album_artists[0].uuid);
+                            };
+
+                            albumInfo.appendChild(albumName);
+                            albumInfo.appendChild(albumArtist);
+
+                            albumItem.appendChild(albumArt);
+                            albumItem.appendChild(albumInfo);
+
+                            document.getElementById('album-list').appendChild(albumItem);
+                        });
+                    } else {
+                        const noAlbums = document.createElement('div');
+                        noAlbums.className = 'col-12';
+                        noAlbums.textContent = 'No albums found for this event.';
+                        document.getElementById('album-list').appendChild(noAlbums);
+                    }
+                })
+                //.catch(() => {
+                //    alert('Failed to fetch event details');
+                //});
+        });
+
+        function handleAlbumClick(albumUuid) {
+            // Handle album click
+            console.log('Album UUID:', albumUuid);
+            // Add your logic here
+        }
+
+        function handleArtistClick(artistUuid) {
+            // Handle artist click
+            console.log('Artist UUID:', artistUuid);
+            // Add your logic here
+        }
+    </script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
