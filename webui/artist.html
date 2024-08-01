@@ -183,33 +183,44 @@
             } else {
                 document.getElementById("artist-art").src = "default_artist.png";
             }
-
+        
             document.getElementById("artist-name").textContent = artist.name;
-
+        
             const artistLike = document.getElementById("artist-like");
             artistLike.className = artist.is_liked
                 ? "artist-like text-danger"
                 : "artist-like";
             artistLike.innerHTML = artist.is_liked ? "&#9829;" : "&#9825;";
             artistLike.onclick = toggleArtistLike;
-
+        
             const albumList = document.getElementById("album-list");
             albumList.innerHTML = "";
-            artist.albums.forEach(async (album) => {
+        
+            // 专辑排序逻辑
+            const sortedAlbums = artist.albums.sort((a, b) => {
+        
+                if (a.year !== b.year) {
+                    return b.year - a.year;
+                } else {
+                    return 0;
+                }
+            });
+        
+            sortedAlbums.forEach(async (album) => {
                 const albumItem = document.createElement("div");
                 albumItem.className = "col-md-3 col-sm-4 col-6 album-item";
-
+        
                 const card = document.createElement("div");
                 card.className = "card bg-dark text-white";
                 card.style.cursor = "pointer";
-
+        
                 card.onclick = () => {
                     window.parent.postMessage(
                         { action: "navigateTo", url: `album.html?uuid=${album.uuid}` },
                         "*"
                     ); // 跳转到专辑详情页
                 };
-
+        
                 const albumArt = document.createElement("img");
                 albumArt.className = "album-art card-img-top";
                 const albumArtBlob = await fetchFile(album.album_art_path);
@@ -220,18 +231,18 @@
                     albumArt.src = "default_album.png";
                 }
                 albumArt.alt = album.name;
-
+        
                 const cardBody = document.createElement("div");
                 cardBody.className = "card-body";
-
+        
                 const albumName = document.createElement("h5");
                 albumName.className = "card-title";
                 albumName.textContent = album.name;
-
+        
                 const albumYear = document.createElement("p");
                 albumYear.className = "card-text";
                 albumYear.textContent = album.year;
-
+        
                 cardBody.appendChild(albumName);
                 cardBody.appendChild(albumYear);
                 card.appendChild(albumArt);
@@ -239,6 +250,7 @@
                 albumItem.appendChild(card);
                 albumList.appendChild(albumItem);
             });
+        
 
             const songList = document.getElementById("song-list");
             songList.innerHTML = "";
