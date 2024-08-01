@@ -17,6 +17,24 @@ from functools import lru_cache
 
 whitespace_re = re.compile(r'\s+')
 
+class Event:
+    def __init__(self, name, year):
+        self.name = name
+        self.year = year
+        self.uuid = str(uuid.uuid4())
+        self.is_liked = False
+        self.liked_time = None
+        self.albums = []
+
+    def like(self):
+        self.is_liked = True
+        self.liked_time = datetime.now()
+        print(f"Event {self.name} liked.")
+
+    def unlike(self):
+        self.is_liked = False
+        print(f"Event {self.name} unliked.")
+
 class Artist:
     def __init__(self, name):
         self.name = name
@@ -44,7 +62,7 @@ class Album:
         self.liked_time = None
         self.album_art_path = ""
         self.year = None
-        self.event = None
+        self.event = {'uuid': None, 'name': None}
 
     def like(self):
         self.is_liked = True
@@ -63,10 +81,10 @@ class Album:
                     break
     
     def update_event(self):
-        if not self.event and self.songs:
+        if not self.event['uuid'] and self.songs:  # 修改这里
             for song in self.songs:
-                if song.event:
-                    self.event = song.event
+                if song.event['uuid']:  # 修改这里
+                    self.event = song.event  # 修改这里
                     break
 
 class Song:
@@ -82,7 +100,7 @@ class Song:
         self.liked_time = None
         self.song_art_path = self.song_art_path = song_art_path or self.find_art_path(file_path)
         self.year = year
-        self.event = event
+        self.event = {'uuid': event.uuid if event else None, 'name': event.name if event else None}
 
     @lru_cache(maxsize=None)
     def generate_possible_art_files(self):
@@ -121,6 +139,7 @@ class Song:
 
 class MusicLibrary:
     def __init__(self):
+        self.events = {}
         self.artists = {}
         self.albums = {}
         self.songs = {}
@@ -201,6 +220,17 @@ class MusicLibrary:
 
     def add_artist(self, artist):
         self.artists[artist.uuid] = artist
+    
+    def add_event(self, event):
+        self.events[event.uuid] = event
+
+    @lru_cache(maxsize=None)
+    def find_event_by_name_year(self, name, year):
+        normalized_name = self.normalize_name(name)
+        for event in self.events.values():
+            if self.normalize_name(event.name) == normalized_name and event.year == year:
+                return event
+        return None
 
     @lru_cache(maxsize=None)
     def find_artist_by_name(self, name):
@@ -274,8 +304,13 @@ class MusicLibrary:
             track_number = id3_tags['track_number']
             disc_number = id3_tags['disc_number']
             year = id3_tags['year']
-            event = id3_tags['event']
+            event_names = id3_tags['event']
 
+            if isinstance(event_names, list):
+                event_name = event_names[0].strip() if event_names else None
+            else:
+                event_name = event_names.strip() if event_names else None
+            
             album_artist_names_tuple = tuple(album_artist_names)
             album = self.find_album_by_name_artist_year(album_name, album_artist_names_tuple, year, album_artist_tag)
             if not album:
@@ -302,6 +337,18 @@ class MusicLibrary:
                 song_artists.append(artist)
 
             song_art_path = album.album_art_path if album.album_art_path else None
+
+            # Handling event
+            event = None
+            if event_name:
+                event = self.find_event_by_name_year(event_name, year)
+                if not event:
+                    event = Event(event_name, year)
+                    self.find_event_by_name_year.cache_clear()
+                    self.add_event(event)
+                if album not in event.albums:
+                    event.albums.append(album)
+                album.event = {'uuid': event.uuid, 'name': event.name}
 
             song = Song(song_name, album, song_artists, file_path, track_number, disc_number, year, song_art_path, event)
             self.add_song(song)
@@ -331,6 +378,7 @@ class MusicLibrary:
 
         except Exception as e:
             print(f"Error processing file {file_path}: {e}")
+            raise
             return
 
     def extract_id3_tags(self, file_path):
@@ -618,6 +666,9 @@ class MusicLibrary:
 
     def search_artist(self, name):
         return self.find_artist_by_name(name)
+    
+    def search_event(self, name, year):
+        return self.find_event_by_name_year(name, year)
 
     def like_song(self, uuid):
         song = self.songs.get(uuid)

@@ -1,6 +1,6 @@
 import threading
 from flask import Flask, Response, request, jsonify, send_file, send_from_directory
-from musiclib import MusicLibrary, Artist, Album, Song
+from musiclib import Event, MusicLibrary, Artist, Album, Song
 import os
 import sys
 from flask_cors import CORS
@@ -54,6 +54,10 @@ def do_save_library():
             'album': song.album['uuid'],
             'artists': [artist['uuid'] for artist in song.artists]
         }) for uuid, song in library.songs.items()},
+        'events': {uuid: serialize_data({
+            **event.__dict__,
+            'albums': [album.uuid for album in event.albums]
+        }) for uuid, event in library.events.items()},
     }
     try: 
         os.remove(data_file)
@@ -125,7 +129,7 @@ def load_library():
                     album.liked_time = album_data.get('liked_time')
                     album.album_art_path = album_data['album_art_path']
                     album.year = album_data['year']
-                    album.event = album_data['event']
+                    album.event = album_data['event']  # 修改这里
                     album.album_artists = {library.artists[artist_uuid] for artist_uuid in album_data['album_artists']}
                     album.songs = []
                     library.albums[uuid] = album
@@ -133,8 +137,9 @@ def load_library():
             except Exception as e:
                 logger.error(f"Failed to restore albums: {e}")
                 raise
-            restored_songs = 0
+
             # Restore songs
+            restored_songs = 0
             try:
                 for uuid, song_data in data['songs'].items():
                     restored_songs += 1
@@ -143,9 +148,15 @@ def load_library():
                     parse_datetime(song_data, ['liked_time'])
                     album = library.albums[song_data['album']]
                     artists = [library.artists[artist_uuid] for artist_uuid in song_data['artists']]
+                    event_data = song_data.get('event')
+                    event = None
+                    if event_data:
+                        event = Event(event_data['name'], 0)
+                        event.uuid = event_data['uuid']
                     song = Song(
                         song_data['name'], album, artists, song_data['file_path'],
-                        song_data['track_number'], song_data['disc_number'], song_data['year'], song_data.get('song_art_path'), song_data.get('event')
+                        song_data['track_number'], song_data['disc_number'], song_data['year'], song_data.get('song_art_path'),
+                        event  # 修改这里
                     )
                     song.uuid = song_data['uuid']
                     song.is_liked = song_data['is_liked']
@@ -164,9 +175,23 @@ def load_library():
                 logger.error(f"Failed to restore songs: {e}")
                 raise
 
+            # Restore events
+            try:
+                for uuid, event_data in data['events'].items():
+                    parse_datetime(event_data, ['liked_time'])
+                    event = Event(event_data['name'], event_data['year'])
+                    event.uuid = event_data['uuid']
+                    event.is_liked = event_data['is_liked']
+                    event.liked_time = event_data.get('liked_time')
+                    event.albums = [library.albums[album_uuid] for album_uuid in event_data['albums']]
+                    library.events[uuid] = event
+                logger.debug("Restored events")
+            except Exception as e:
+                logger.error(f"Failed to restore events: {e}")
+                raise
+
             # Restore graph
             try:
-                # library.graph = {k: {kk: {'strength': vv['strength'], 'details': set(vv['details'])} for kk, vv in v.items()} for k, v in data.get('graph', {}).items()}
                 library.graph = library.build_graph()
                 logger.debug("Restored graph")
             except Exception as e:
@@ -188,6 +213,14 @@ def load_library():
         logger.error(f"Failed to load library from file: {e}")
         raise
 
+@app.route('/api/add_event', methods=['GET'])
+def add_event():
+    name = request.args.get('name')
+    year = request.args.get('year')
+    event = Event(name, year)
+    library.add_event(event)
+    save_library()
+    return jsonify({'message': 'Event added', 'uuid': event.uuid, 'year': event.year}), 201
 
 @app.route('/api/add_song', methods=['GET'])
 def add_song():
@@ -225,6 +258,24 @@ def add_artist():
     library.add_artist(artist)
     save_library()
     return jsonify({'message': 'Artist added', 'uuid': artist.uuid}), 201
+
+@app.route('/api/like_event/<uuid>', methods=['GET'])
+def like_event(uuid):
+    event = library.events.get(uuid)
+    if event:
+        event.like()
+        save_library()
+        return jsonify({'message': 'Event liked'}), 200
+    return jsonify({'message': 'Event not found'}), 404
+
+@app.route('/api/unlike_event/<uuid>', methods=['GET'])
+def unlike_event(uuid):
+    event = library.events.get(uuid)
+    if event:
+        event.unlike()
+        save_library()
+        return jsonify({'message': 'Event unliked'}), 200
+    return jsonify({'message': 'Event not found'}), 404
 
 @app.route('/api/like_song/<uuid>', methods=['GET'])
 def like_song(uuid):
@@ -293,6 +344,27 @@ def search_artist(name):
         return jsonify({'name': artist.name, 'uuid': artist.uuid}), 200
     return jsonify({'message': 'Artist not found'}), 404
 
+@app.route('/api/search_event/<name>/<year>', methods=['GET'])
+def search_event(name, year):
+    event = library.search_event(name, year)
+    if event:
+        return jsonify({'name': event.name, 'uuid': event.uuid, 'year': event.year}), 200
+    return jsonify({'message': 'Event not found'}), 404
+
+@app.route('/api/show_event/<uuid>', methods=['GET'])
+def show_event(uuid):
+    event = library.events.get(uuid)
+    if event:
+        return jsonify({
+            'name': event.name,
+            'uuid': event.uuid,
+            'year': event.year,
+            'albums': [{'name': album.name, 'uuid': album.uuid} for album in event.albums],
+            'is_liked': event.is_liked,
+            'liked_time': event.liked_time,
+        }), 200
+    return jsonify({'message': 'Event not found'}), 404
+
 @app.route('/api/show_library', methods=['GET'])
 def show_library():
     return jsonify({
@@ -322,6 +394,18 @@ def show_library():
                 'liked_time': artist.liked_time
             } for artist in library.artists.values()]
         }), 200
+
+@app.route('/api/show_liked_events', methods=['GET'])
+def show_liked_events():
+    liked_events = [{
+        'name': event.name,
+        'uuid': event.uuid,
+        'year': event.year,
+        'albums': [{'name': album.name, 'uuid': album.uuid} for album in event.albums],
+        'is_liked': event.is_liked,
+        'liked_time': event.liked_time,
+    } for event in library.events.values() if event.is_liked]
+    return jsonify(liked_events), 200
 
 @app.route('/api/show_liked_songs', methods=['GET'])
 def show_liked_songs():
