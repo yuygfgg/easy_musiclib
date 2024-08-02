@@ -394,6 +394,7 @@ class MusicLibrary:
                 'artists': ['Unknown Artist'],
                 'track_number': 1,
                 'disc_number': 1,
+                'event': 'Unknow Event',
                 'year': None
             }
 
@@ -408,6 +409,7 @@ class MusicLibrary:
                 'artists': ['Unknown Artist'],
                 'track_number': 1,
                 'disc_number': 1,
+                'event': 'Unknow Event',
                 'year': None
             }
 
