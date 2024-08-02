@@ -156,7 +156,7 @@ def load_library():
                     song = Song(
                         song_data['name'], album, artists, song_data['file_path'],
                         song_data['track_number'], song_data['disc_number'], song_data['year'], song_data.get('song_art_path'),
-                        event  # 修改这里
+                        event
                     )
                     song.uuid = song_data['uuid']
                     song.is_liked = song_data['is_liked']
@@ -359,7 +359,7 @@ def show_event(uuid):
             'name': event.name,
             'uuid': event.uuid,
             'year': event.year,
-            'albums': [{'name': album.name, 'uuid': album.uuid} for album in event.albums],
+            'albums': [{'name': album.name, 'uuid': album.uuid, 'album_art_path': album.album_art_path, 'album_artists': [{'name': artist.name, 'uuid': artist.uuid} for artist in album.album_artists]} for album in event.albums],
             'is_liked': event.is_liked,
             'liked_time': event.liked_time,
         }), 200

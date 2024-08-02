@@ -528,6 +528,7 @@
         function navigateTo(url) {
             const iframe = document.getElementById("content-frame");
             const newUrl = `${url}&apibaseUrl=${encodeURIComponent(apiBaseUrl)}`;
+            console.log(newUrl);
             iframe.src = newUrl;
         }
 

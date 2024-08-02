@@ -1,108 +1,154 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Event Details</title>
+    <title>活动详情</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <style>
-        .album-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 1rem;
+        body {
+            background-color: #1e1e1e;
+            color: #ffffff;
         }
+
         .album-art {
             width: 50px;
             height: 50px;
             margin-right: 1rem;
         }
+
+        .album-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
         .clickable {
             cursor: pointer;
-            color: blue;
+            color: #007bff;
             text-decoration: underline;
+        }
+
+        .album-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .album-info .clickable {
+            margin-bottom: 0.5rem;
+        }
+
+        .artist {
+            font-size: 14px;
+            color: #bbb;
+        }
+
+        .artist a {
+            color: #007bff;
+            margin-right: 5px;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
-        <h1 class="my-4">Event Details</h1>
+        <h1 class="my-4">活动详情 <span id="event-name"></span></h1>
         <div id="album-list" class="row"></div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const urlParams = new URLSearchParams(window.location.search);
             const uuid = urlParams.get('uuid');
-            const apiBaseurl = urlParams.get('apiBaseurl');
+            const apibaseUrl = urlParams.get('apibaseUrl');
 
-            if (!uuid || !apiBaseurl) {
-                alert('UUID and API Base URL are required');
+            if (!uuid || !apibaseUrl) {
+                alert('UUID 和 API 基础 URL 是必需的');
                 return;
             }
 
-            fetch(`${apiBaseurl}/api/show_event/${uuid}`)
+            fetch(`${apibaseUrl}/show_event/${uuid}`)
                 .then(response => response.json())
                 .then(data => {
-                    if (data && data.albums) {
-                        data.albums.forEach(album => {
-                            const albumItem = document.createElement('div');
-                            albumItem.className = 'col-md-4 album-item';
+                    if (data) {
+                        document.getElementById('event-name').textContent = data.name;
 
-                            const albumArtUrl = album.album_art_path ? `${apiBaseurl}/api/getfile?file_path=${encodeURIComponent(album.album_art_path)}` : 'default_album.png';
+                        if (data.albums) {
+                            data.albums.forEach(album => {
+                                const albumItem = document.createElement('div');
+                                albumItem.className = 'col-md-4 album-item';
 
-                            const albumArt = document.createElement('img');
-                            albumArt.src = albumArtUrl;
-                            albumArt.alt = 'Album Art';
-                            albumArt.className = 'album-art';
+                                const albumArtUrl = album.album_art_path ? `${apibaseUrl}/getfile?file_path=${encodeURIComponent(album.album_art_path)}` : 'default_album.png';
 
-                            const albumInfo = document.createElement('div');
+                                const albumArt = document.createElement('img');
+                                albumArt.src = albumArtUrl;
+                                albumArt.alt = '专辑封面';
+                                albumArt.className = 'album-art';
 
-                            const albumName = document.createElement('div');
-                            albumName.className = 'clickable';
-                            albumName.textContent = album.name;
-                            albumName.onclick = function() {
-                                handleAlbumClick(album.uuid);
-                            };
+                                const albumInfo = document.createElement('div');
+                                albumInfo.className = 'album-info';
 
-                            const albumArtist = document.createElement('div');
-                            albumArtist.className = 'clickable';
-                            albumArtist.textContent = album.album_artists[0].name;
-                            albumArtist.onclick = function() {
-                                handleArtistClick(album.album_artists[0].uuid);
-                            };
+                                const albumName = document.createElement('div');
+                                albumName.className = 'clickable';
+                                albumName.textContent = album.name;
+                                albumName.onclick = function () {
+                                    handleAlbumClick(album.uuid, apibaseUrl);
+                                };
 
-                            albumInfo.appendChild(albumName);
-                            albumInfo.appendChild(albumArtist);
+                                const albumArtists = document.createElement('div');
+                                albumArtists.className = 'artist';
+                                album.album_artists.forEach(artist => {
+                                    const artistLink = document.createElement('a');
+                                    artistLink.href = `artist.html?uuid=${artist.uuid}&apibaseUrl=${apibaseUrl}`;
+                                    artistLink.textContent = artist.name;
+                                    artistLink.onclick = function (event) {
+                                        event.stopPropagation();
+                                        handleArtistClick(artist.uuid);
+                                    };
+                                    albumArtists.appendChild(artistLink);
+                                });
 
-                            albumItem.appendChild(albumArt);
-                            albumItem.appendChild(albumInfo);
+                                albumInfo.appendChild(albumName);
+                                albumInfo.appendChild(albumArtists);
 
-                            document.getElementById('album-list').appendChild(albumItem);
-                        });
-                    } else {
-                        const noAlbums = document.createElement('div');
-                        noAlbums.className = 'col-12';
-                        noAlbums.textContent = 'No albums found for this event.';
-                        document.getElementById('album-list').appendChild(noAlbums);
+                                albumItem.appendChild(albumArt);
+                                albumItem.appendChild(albumInfo);
+
+                                document.getElementById('album-list').appendChild(albumItem);
+                            });
+                        } else {
+                            const noAlbums = document.createElement('div');
+                            noAlbums.className = 'col-12';
+                            noAlbums.textContent = '未找到此活动的专辑。';
+                            document.getElementById('album-list').appendChild(noAlbums);
+                        }
                     }
-                })
-                //.catch(() => {
-                //    alert('Failed to fetch event details');
-                //});
+                });
         });
 
-        function handleAlbumClick(albumUuid) {
-            // Handle album click
-            console.log('Album UUID:', albumUuid);
-            // Add your logic here
+        function handleAlbumClick(albumUuid, apibaseUrl) {
+            window.parent.postMessage(
+                {
+                    action: "navigateTo",
+                    url: `album.html?uuid=${albumUuid}&apibaseUrl=${apibaseUrl}`,
+                },
+                "*"
+            );
         }
 
         function handleArtistClick(artistUuid) {
-            // Handle artist click
-            console.log('Artist UUID:', artistUuid);
-            // Add your logic here
+            window.parent.postMessage(
+                {
+                    action: "navigateTo",
+                    url: `artist.html?uuid=${artistUuid}`,
+                },
+                "*"
+            );
         }
     </script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
 </body>
+
 </html>
