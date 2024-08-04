@@ -18,13 +18,13 @@ from functools import lru_cache
 whitespace_re = re.compile(r'\s+')
 
 class Event:
-    def __init__(self, name, year):
+    def __init__(self, name):
         self.name = name
-        self.year = year
         self.uuid = str(uuid.uuid4())
         self.is_liked = False
         self.liked_time = None
         self.albums = []
+        self.year = None
 
     def like(self):
         self.is_liked = True
@@ -225,10 +225,10 @@ class MusicLibrary:
         self.events[event.uuid] = event
 
     @lru_cache(maxsize=None)
-    def find_event_by_name_year(self, name, year):
+    def find_event_by_name(self, name):
         normalized_name = self.normalize_name(name)
         for event in self.events.values():
-            if self.normalize_name(event.name) == normalized_name and event.year == year:
+            if self.normalize_name(event.name) == normalized_name:
                 return event
         return None
 
@@ -341,10 +341,10 @@ class MusicLibrary:
             # Handling event
             event = None
             if event_name:
-                event = self.find_event_by_name_year(event_name, year)
+                event = self.find_event_by_name(event_name)
                 if not event:
-                    event = Event(event_name, year)
-                    self.find_event_by_name_year.cache_clear()
+                    event = Event(event_name)
+                    self.find_event_by_name.cache_clear()
                     self.add_event(event)
                 if album not in event.albums:
                     event.albums.append(album)
@@ -379,7 +379,6 @@ class MusicLibrary:
         except Exception as e:
             print(f"Error processing file {file_path}: {e}")
             raise
-            return
 
     def extract_id3_tags(self, file_path):
         file_extension = os.path.splitext(file_path)[1].lower()
@@ -442,6 +441,7 @@ class MusicLibrary:
         year = self.extract_year(year)
 
         return self.parse_artists(title, album, artists, track_number, disc_number, album_artists, year, event)
+
 
     def parse_artists(self, title, album, artists, track_number=1, disc_number=1, album_artists=None, year=None, event = None):
         delimiters = ['/', '／', '&', '＆', ' x ', ';', '；', ',', '，', '×', '　', '、']
@@ -557,6 +557,23 @@ class MusicLibrary:
                         print(f"Merging alias artist '{alias_name}' into primary artist '{primary_artist_name}'")
                         self.merge_artist_by_name(primary_artist_name, alias_name)
                         print(f"Successfully merged '{alias_name}' into '{primary_artist_name}'")
+
+        # 遍历所有event，如果里面有year==None的album，那么将这个album和里面的song的year都设置成event.year
+        for event in self.events.values():
+            for album in event.albums:
+                if album.year is None:
+                    print(f"Setting year for album {album.name} and its songs to {event.year}")
+                    album.year = event.year
+                    for song in album.songs:
+                        song.year = event.year
+
+        # 遍历一个album，如果一个album有album art而其中部分歌曲没有songart, 那么设置这些歌曲的songart为albumart
+        for album in self.albums.values():
+            if album.album_art_path:
+                for song in album.songs:
+                    if not song.song_art_path:
+                        print(f"Setting song art for song {song.name} to album art {album.album_art_path}")
+                        song.song_art_path = album.album_art_path
 
 
     def merge_artist_by_uuid(self, uuid1, uuid2):

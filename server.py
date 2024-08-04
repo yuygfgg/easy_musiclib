@@ -1,3 +1,4 @@
+import tempfile
 import threading
 from flask import Flask, Response, request, jsonify, send_file, send_from_directory
 from musiclib import Event, MusicLibrary, Artist, Album, Song
@@ -11,6 +12,7 @@ import opencc
 import datetime
 import logging
 import lrc
+
 
 app = Flask(__name__)
 CORS(app)
@@ -538,7 +540,18 @@ def getfile():
     if not file_path or not os.path.exists(file_path):
         return jsonify({'message': 'File not found'}), 404
 
-    return send_file(file_path, as_attachment=True)
+    # Extract file name without extension and check if it's 'folder' or 'cover'
+    file_name_without_ext = os.path.splitext(os.path.basename(file_path))[0].lower()
+    if file_name_without_ext not in ['folder', 'cover']:
+        return jsonify({'message': 'Invalid file name'}), 400
+
+    # Check if the file is an image
+    if not file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.tiff')):
+        return jsonify({'message': 'File is not an image'}), 400
+
+    response = send_file(file_path, as_attachment=True)
+
+    return response
 
 @app.route('/api/getStream', methods=['GET'])
 def get_stream():
