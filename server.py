@@ -1,9 +1,7 @@
-import tempfile
 import threading
 from flask import Flask, Response, request, jsonify, send_file, send_from_directory
 from musiclib import Event, MusicLibrary, Artist, Album, Song
 import os
-import sys
 from flask_cors import CORS
 from flask_compress import Compress
 import json
