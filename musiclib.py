@@ -314,13 +314,14 @@ class MusicLibrary:
             album_artist_names_tuple = tuple(album_artist_names)
             album = self.find_album_by_name_artist_year(album_name, album_artist_names_tuple, year, album_artist_tag)
             if not album:
-                print(f"Adding new album {album_name} because it doesn't exist now.")
+                print(f"Adding new album {album_name}.")
                 album = Album(album_name)
                 self.find_album_by_name_artist_year.cache_clear()
                 album.year = year
                 for artist_name in album_artist_names:
                     artist = self.find_artist_by_name(artist_name)
                     if not artist:
+                        print(f"Adding new album {artist_name}.")
                         artist = Artist(artist_name)
                         self.find_artist_by_name.cache_clear()
                         self.add_artist(artist)
@@ -343,6 +344,7 @@ class MusicLibrary:
             if event_name:
                 event = self.find_event_by_name(event_name)
                 if not event:
+                    print(f"Adding new album {event_name}.")
                     event = Event(event_name)
                     self.find_event_by_name.cache_clear()
                     self.add_event(event)
