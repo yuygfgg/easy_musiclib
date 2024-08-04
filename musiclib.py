@@ -321,7 +321,7 @@ class MusicLibrary:
                 for artist_name in album_artist_names:
                     artist = self.find_artist_by_name(artist_name)
                     if not artist:
-                        print(f"Adding new album {artist_name}.")
+                        print(f"Adding new artist {artist_name}.")
                         artist = Artist(artist_name)
                         self.find_artist_by_name.cache_clear()
                         self.add_artist(artist)
@@ -344,7 +344,7 @@ class MusicLibrary:
             if event_name:
                 event = self.find_event_by_name(event_name)
                 if not event:
-                    print(f"Adding new album {event_name}.")
+                    print(f"Adding new event {event_name}.")
                     event = Event(event_name)
                     self.find_event_by_name.cache_clear()
                     self.add_event(event)
@@ -560,7 +560,6 @@ class MusicLibrary:
                         self.merge_artist_by_name(primary_artist_name, alias_name)
                         print(f"Successfully merged '{alias_name}' into '{primary_artist_name}'")
 
-        # 遍历所有event，如果里面有year==None的album，那么将这个album和里面的song的year都设置成event.year
         for event in self.events.values():
             for album in event.albums:
                 if album.year is None:
@@ -569,7 +568,6 @@ class MusicLibrary:
                     for song in album.songs:
                         song.year = event.year
 
-        # 遍历一个album，如果一个album有album art而其中部分歌曲没有songart, 那么设置这些歌曲的songart为albumart
         for album in self.albums.values():
             if album.album_art_path:
                 for song in album.songs:
