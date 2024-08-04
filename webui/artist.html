@@ -196,9 +196,17 @@
             const albumList = document.getElementById("album-list");
             albumList.innerHTML = "";
         
-            // 专辑排序逻辑
-            const sortedAlbums = artist.albums.sort((a, b) => {
+            // 收集专辑数据和图片URL
+            const albumsWithArt = await Promise.all(
+                artist.albums.map(async (album) => {
+                    const albumArtBlob = await fetchFile(album.album_art_path);
+                    const albumArtUrl = albumArtBlob ? URL.createObjectURL(albumArtBlob) : "default_album.png";
+                    return { ...album, albumArtUrl };
+                })
+            );
         
+            // 专辑排序逻辑
+            const sortedAlbums = albumsWithArt.sort((a, b) => {
                 if (a.year !== b.year) {
                     return b.year - a.year;
                 } else {
@@ -206,7 +214,8 @@
                 }
             });
         
-            sortedAlbums.forEach(async (album) => {
+            // 渲染专辑
+            sortedAlbums.forEach((album) => {
                 const albumItem = document.createElement("div");
                 albumItem.className = "col-md-3 col-sm-4 col-6 album-item";
         
@@ -223,13 +232,7 @@
         
                 const albumArt = document.createElement("img");
                 albumArt.className = "album-art card-img-top";
-                const albumArtBlob = await fetchFile(album.album_art_path);
-                if (albumArtBlob) {
-                    const albumArtUrl = URL.createObjectURL(albumArtBlob);
-                    albumArt.src = albumArtUrl;
-                } else {
-                    albumArt.src = "default_album.png";
-                }
+                albumArt.src = album.albumArtUrl;
                 albumArt.alt = album.name;
         
                 const cardBody = document.createElement("div");
@@ -251,7 +254,6 @@
                 albumList.appendChild(albumItem);
             });
         
-
             const songList = document.getElementById("song-list");
             songList.innerHTML = "";
             songs.sort((a, b) => {

@@ -485,7 +485,10 @@ def show_album(uuid):
 def show_artist(uuid):
     artist = library.goto_artist(uuid)
     if artist:
-        albums = [{'name': album.name, 'uuid': album.uuid, 'year': album.year, 'album_art_path': album.album_art_path, 'is_liked': album.is_liked} for album in library.albums.values() if artist in album.album_artists]
+        albums = sorted(
+            [{'name': album.name, 'uuid': album.uuid, 'year': album.year, 'album_art_path': album.album_art_path, 'is_liked': album.is_liked} for album in library.albums.values() if artist in album.album_artists],
+            key=lambda x: (x['year'] is None, -x['year'] if x['year'] is not None else 0)
+        )
         songs = [{'name': song.name, 'uuid': song.uuid, 'artists': song.artists, 'album': song.album, 'song_art_path': song.song_art_path, 'is_liked': song.is_liked, 'track_number': song.track_number, 'disc_number': song.disc_number} for song in library.songs.values() if artist.uuid in [a['uuid'] for a in song.artists]]
         return jsonify({
             'name': artist.name,
