@@ -374,7 +374,8 @@ class MusicLibrary:
             album.update_year()
             album.update_event()
             
-            event.update_year()
+            if event:
+                event.update_year()
 
             for artist in album.album_artists:
                 if not artist.artist_art_path:
