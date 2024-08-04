@@ -34,6 +34,12 @@ class Event:
     def unlike(self):
         self.is_liked = False
         print(f"Event {self.name} unliked.")
+        
+    def update_year(self):
+        if self.year is None:
+            for album in self.albums:
+                if album.year is not None:
+                    self.year = album.year
 
 class Artist:
     def __init__(self, name):
@@ -367,6 +373,8 @@ class MusicLibrary:
 
             album.update_year()
             album.update_event()
+            
+            event.update_year()
 
             for artist in album.album_artists:
                 if not artist.artist_art_path:
