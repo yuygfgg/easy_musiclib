@@ -458,7 +458,7 @@ class MusicLibrary:
     def parse_artists(self, title, album, artists, track_number=1, disc_number=1, album_artists=None, year=None, event = None):
         delimiters = ['/', '／', '&', '＆', ' x ', ';', '；', ',', '，', '×', '　', '、']
         delimiters = tuple(delimiters)
-        ignore = ['cool&create', 'Factory Noise&AG']
+        ignore = ['cool&create', 'Factory Noise&AG', 'Sing, R. Sing!']
         ignore_normalized = [self.normalize_name(item) for item in ignore]
         parsed_artists = []
 
