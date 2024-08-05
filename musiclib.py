@@ -356,7 +356,8 @@ class MusicLibrary:
                     self.add_event(event)
                 if album not in event.albums:
                     event.albums.append(album)
-                album.event = {'uuid': event.uuid, 'name': event.name}
+                if album.event is None:
+                    album.event = {'uuid': event.uuid, 'name': event.name}
 
             song = Song(song_name, album, song_artists, file_path, track_number, disc_number, year, song_art_path, event)
             self.add_song(song)
