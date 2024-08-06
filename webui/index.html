@@ -804,6 +804,7 @@
                 `;
                             optionDiv.onclick = () => {
                                 selectLyrics(option.lyrics);
+                                localStorage.setItem(`lyrics_disabled_${currentSongUUID}`, 'false');
                                 closeLyricsSelectionPopup();
                             };
                             lyricsOptionsContainer.appendChild(optionDiv);
