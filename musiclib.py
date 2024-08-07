@@ -905,8 +905,9 @@ class MusicLibrary:
 
         return {"nodes": list(unique_nodes.values()), "edges": list(unique_edges.values())}
 
+# todo: combine artist = add_artist & merge_artist, migrate artist_art!
 
-        
+
 if __name__ == "__main__":
     library = MusicLibrary()
     library.scan('/Users/a1/other')
