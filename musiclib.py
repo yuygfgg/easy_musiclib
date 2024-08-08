@@ -593,7 +593,11 @@ class MusicLibrary:
         
         artist1 = self.artists[uuid1]
         artist2 = self.artists[uuid2]
-
+        
+        # Update artist_art
+        if artist1.artist_art_path == "" and artist2.artist_art_path != "":
+            self.artists[uuid1].artist_art_path = self.artists[uuid2].artist_art_path
+        
         # Update albums
         for album in self.albums.values():
             if artist2 in album.album_artists:
@@ -611,10 +615,7 @@ class MusicLibrary:
                     artist['name'] = artist1.name
                     artist_updated = True
 
-            if artist_updated:
-                if not song.song_art_path and artist1.artist_art_path:
-                    song.song_art_path = artist1.artist_art_path
-                if song.album['uuid'] in self.albums:
+            if artist_updated and song.album['uuid'] in self.albums:
                     album = self.albums[song.album['uuid']]
                     for album_artist in album.album_artists:
                         if album_artist.uuid == uuid2:

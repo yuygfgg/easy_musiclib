@@ -151,7 +151,7 @@ def load_library():
                     event_data = song_data.get('event')
                     event = None
                     if event_data:
-                        event = Event(event_data['name'], 0)
+                        event = Event(event_data['name'])
                         event.uuid = event_data['uuid']
                     song = Song(
                         song_data['name'], album, artists, song_data['file_path'],
@@ -179,7 +179,8 @@ def load_library():
             try:
                 for uuid, event_data in data['events'].items():
                     parse_datetime(event_data, ['liked_time'])
-                    event = Event(event_data['name'], event_data['year'])
+                    event = Event(event_data['name'])
+                    event.year = event_data['year']
                     event.uuid = event_data['uuid']
                     event.is_liked = event_data['is_liked']
                     event.liked_time = event_data.get('liked_time')
