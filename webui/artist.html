@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>艺术家详情</title>
+    <title>Artist</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <style>
         body {
@@ -100,20 +100,20 @@
                 <img id="artist-art" class="artist-art" src="" alt="艺术家图片" />
             </div>
             <div class="col-md-9">
-                <h1 id="artist-name">艺术家姓名</h1>
+                <h1 id="artist-name">Artist Name</h1>
                 <span id="artist-like" class="artist-like">&#9825;</span>
-                <a href="#" onclick="navigateTorelation()">关系图</a>
+                <a href="#" onclick="navigateTorelation()">Relationship Graph</a>
             </div>
         </div>
         <div class="row">
             <div class="col-12">
-                <h2>专辑</h2>
+                <h2>Albums</h2>
                 <div id="album-list" class="row"></div>
             </div>
         </div>
         <div class="row">
             <div class="col-12">
-                <h2>歌曲</h2>
+                <h2>Songs</h2>
                 <div id="song-list" class="song-list"></div>
             </div>
         </div>
@@ -124,11 +124,6 @@
         const urlParams = new URLSearchParams(window.location.search);
         const artistUUID = urlParams.get("uuid");
         apiBaseUrl = urlParams.get("apibaseUrl");
-
-        if (!artistUUID) {
-            document.body.innerHTML = "<h1>缺少艺术家UUID参数</h1>";
-            throw new Error("缺少艺术家UUID参数");
-        }
 
         window.currentIndex = 0;
         let songs = [];

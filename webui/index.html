@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en-US">
 
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>主页面</title>
+    <title>Index</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/lrc-file-parser@2.4.1/dist/lrc-file-parser.min.js"></script>
     <style>
@@ -446,11 +446,11 @@
     <div class="sidebar" id="sidebar">
         <br>
         <div class="search-container">
-            <input type="text" id="search-query" placeholder="搜索..." onkeydown="handleSearchKey(event)" />
+            <input type="text" id="search-query" placeholder="Search..." onkeydown="handleSearchKey(event)" />
         </div>
-        <a href="#" onclick="navigateToLiked()">我喜欢的</a>
-        <a href="#" onclick="navigateToAll()">首页</a>
-        <a href="#" onclick="navigateToSettings()">设置</a>
+        <a href="#" onclick="navigateToLiked()">Liked</a>
+        <a href="#" onclick="navigateToAll()">Library</a>
+        <a href="#" onclick="navigateToSettings()">Settings</a>
     </div>
     <div class="content shifted" id="content">
         <iframe id="content-frame" src=""></iframe>
@@ -459,9 +459,9 @@
 
     <div class="player-bar" id="player-bar">
         <div class="song-details">
-            <img id="playing-art" src="" alt="歌曲封面" />
+            <img id="playing-art" src="" alt="Song Art" />
             <div>
-                <div class="title" id="playing-title">歌曲名称</div>
+                <div class="title" id="playing-title">Song name</div>
                 <div class="artist" id="playing-artists"></div>
                 <div class="album" id="playing-album"></div>
             </div>
@@ -484,16 +484,16 @@
     <div class="song-popup" id="song-popup">
         <button class="close-popup" onclick="closeSongPopup()">×</button>
         <div class="left-section">
-            <img id="popup-art" src="" alt="歌曲封面" />
-            <div class="title" id="popup-title">歌曲名称</div>
-            <div class="artist" id="popup-artists">歌手</div>
-            <div class="album" id="popup-album">专辑</div>
+            <img id="popup-art" src="" alt="Song Art" />
+            <div class="title" id="popup-title">Song Name</div>
+            <div class="artist" id="popup-artists">Artist</div>
+            <div class="album" id="popup-album">Album</div>
         </div>
         <div class="right-section">
             <div class="settings">
-                <button onclick="openLyricsSelectionPopup()">设置</button>
+                <button onclick="openLyricsSelectionPopup()">Settings</button>
             </div>
-            <h3>歌词</h3>
+            <h3>Lyrics</h3>
             <div class="lyrics" id="popup-lyrics">loading...</div>
         </div>
     </div>
@@ -711,7 +711,7 @@
                 document.getElementById("playing-album").innerHTML;
             document.getElementById("popup-lyrics").textContent = "loading...";
             if (localStorage.getItem(`lyrics_disabled_${currentSongUUID}`) === 'true') {
-                document.getElementById("popup-lyrics").textContent = "歌词：Disabled";
+                document.getElementById("popup-lyrics").textContent = "Disabled";
             }
             document.getElementById("song-popup").style.display = "flex";
             isManuallyOpen = true;
@@ -737,7 +737,7 @@
 
             // Check if lyrics are disabled for this song
             if (localStorage.getItem(`lyrics_disabled_${currentSongUUID}`) === 'true') {
-                document.getElementById("popup-lyrics").textContent = "歌词：Disabled";
+                document.getElementById("popup-lyrics").textContent = "Disabled";
                 return;
             }
 
@@ -766,13 +766,13 @@
                     if (data.length > 0) {
                         selectLyrics(data[0].lyrics);
                     } else {
-                        document.getElementById("popup-lyrics").textContent = "未找到歌词";
+                        document.getElementById("popup-lyrics").textContent = "Lyrics not found";
                         console.log("no lrc");
                     }
                 })
                 .catch(error => {
                     console.error("Error fetching lyrics:", error);
-                    document.getElementById("popup-lyrics").textContent = "未找到歌词";
+                    document.getElementById("popup-lyrics").textContent = "Lyrics not found";
                 });
         }
 
@@ -817,7 +817,7 @@
                         });
                     } else {
                         document.getElementById("popup-lyrics").textContent =
-                            "未找到歌词"; // 如果没有找到歌词，显示默认消息
+                            "Lyrics not found"; // 如果没有找到歌词，显示默认消息
                     }
                 });
         }
