@@ -9,14 +9,14 @@ A music library server, including server, cli client, and webui. Supports muitip
 
 https://github.com/yuygfgg/easy_musiclib/assets/140488233/9d9ad2b4-c3d5-4b4a-9faa-0ac6fe2a8cd8
 
+<img width="1268" alt="截屏2024-08-09 22 02 18" src="https://github.com/user-attachments/assets/060fa715-df3c-40fd-8bee-f97b79d05a62">
+<img width="1266" alt="截屏2024-08-09 22 02 53" src="https://github.com/user-attachments/assets/ae94fddf-ff60-46b6-88fe-45dd7397eff8">
+<img width="1267" alt="截屏2024-08-09 22 03 05" src="https://github.com/user-attachments/assets/52b080e7-3fe2-40ed-9827-689bc93c8546">
+<img width="1272" alt="截屏2024-08-09 22 03 55" src="https://github.com/user-attachments/assets/7b386ee1-3e2e-4bb3-ae81-9b096aa73d2e">
+<img width="1269" alt="截屏2024-08-09 22 04 48" src="https://github.com/user-attachments/assets/edbc9f2e-bd6a-440d-8f22-2b3bd75ef7a3">
+<img width="1268" alt="截屏2024-08-09 22 04 57" src="https://github.com/user-attachments/assets/2289b93e-414f-4afa-a0e3-ccfb0d3ab2fe">
+<img width="1272" alt="截屏2024-08-09 22 05 27" src="https://github.com/user-attachments/assets/2924f478-ffc4-46da-8994-eb09ab19a3ce">
 
-<img width="1102" alt="截屏2024-08-09 20 28 06" src="https://github.com/user-attachments/assets/135cb234-4de0-47ea-bd65-ae1dd5fd1eeb">
-<img width="1104" alt="截屏2024-08-09 20 28 24" src="https://github.com/user-attachments/assets/553fc817-53ed-44c1-97f4-641df6e341e5">
-<img width="1270" alt="截屏2024-08-09 20 31 02" src="https://github.com/user-attachments/assets/4e1d30d2-e49f-4bef-aa4c-15bb53d257fa">
-<img width="1273" alt="截屏2024-08-09 20 33 30" src="https://github.com/user-attachments/assets/ba397058-4579-46c2-be78-c5fbd0626bd6">
-<img width="1270" alt="截屏2024-08-09 20 33 55" src="https://github.com/user-attachments/assets/ffa418fa-6450-4ef0-b2ea-e60c93eef61f">
-<img width="1263" alt="截屏2024-08-09 20 36 02" src="https://github.com/user-attachments/assets/d1b853ca-3e24-41cd-ae67-653e1bd259ab">
-<img width="1266" alt="截屏2024-08-09 20 39 39" src="https://github.com/user-attachments/assets/7dd60dc4-29e1-4ef5-ba81-fb2637d1f1c3">
 
 
 ### Schedual
