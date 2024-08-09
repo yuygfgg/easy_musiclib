@@ -25,8 +25,6 @@ https://github.com/yuygfgg/easy_musiclib/assets/140488233/9d9ad2b4-c3d5-4b4a-9fa
 
 The project will continue unless I find another music library server that handles muitiple artist and muiti-disc albums correctly.
 
-Webui is currently in **Chinese** only.
-
 ### Usage
 
 #### Server Setup
