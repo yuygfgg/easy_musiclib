@@ -450,6 +450,7 @@
         </div>
         <a href="#" onclick="navigateToLiked()">我喜欢的</a>
         <a href="#" onclick="navigateToAll()">首页</a>
+        <a href="#" onclick="navigateToSettings()">设置</a>
     </div>
     <div class="content shifted" id="content">
         <iframe id="content-frame" src=""></iframe>
@@ -562,6 +563,11 @@
         function navigateToAll() {
             console.log("Navigating to all.html"); // Log navigation for debugging
             navigateToForLikedAndAll("all.html");
+            toggleSidebar();
+        }
+        function navigateToSettings() {
+            console.log("Navigating to settings.html"); // Log navigation for debugging
+            navigateToForLikedAndAll("settings.html");
             toggleSidebar();
         }
         function toggleSidebar() {

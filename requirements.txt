@@ -3,7 +3,6 @@ Flask_Compress==1.15
 Flask_Cors==4.0.1
 opencc_python_reimplemented==0.1.7
 orjson==3.10.6
-Pillow==10.1.0
 Pillow==10.4.0
 Pygments==2.18.0
 python_vlc==3.0.20123

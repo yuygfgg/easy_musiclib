@@ -285,14 +285,18 @@ class MusicLibrary:
     
     def scan(self, directory):
         scanned_count = 0
+        existing_files = {song.file_path for song in self.songs.values()}
+        
         for root, dirs, files in os.walk(directory):
             for file in files:
                 if file.endswith(".flac"):
-                    scanned_count += 1
-                    if scanned_count % 250 == 0:
-                        print(f"Scanned {scanned_count} files.")
                     file_path = os.path.join(root, file)
-                    self.scan_file(file_path)
+                    if file_path not in existing_files:
+                        scanned_count += 1
+                        if scanned_count % 250 == 0:
+                            print(f"Scanned {scanned_count} files.")
+                        self.scan_file(file_path)
+                        
         self.graph = self.build_graph()
         self.auto_merge()
 
