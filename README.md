@@ -23,7 +23,7 @@ https://github.com/yuygfgg/easy_musiclib/assets/140488233/9d9ad2b4-c3d5-4b4a-9fa
 
 - mobile app : ~ 2025
 
-The project will continue unless I find another music library server that handles muitiple artist  and muiti-disc albums correctly.
+The project will continue unless I find another music library server that handles muitiple artist and muiti-disc albums correctly.
 
 Webui is currently in **Chinese** only.
 
@@ -31,15 +31,21 @@ Webui is currently in **Chinese** only.
 
 #### Server Setup
 1. Clone the repository
-2. Install all necessary python packages ``` pypy3 -m pip install -r requirements.txt ```
-3. Run server ```pypy3 server.py ```
+2. Install all necessary python packages ``` pip3 install -r requirements.txt ```
+3. Run server ```python3 server.py ```
 
 #### Scan Directory
-1. install cURL
-2. run command ``` curl "http://server_address/scan?directory=path_to_music" ```
+1. Goto settings page
+2. Enter your music folder and click Scan button
+
+#### Merge Unintendedly Splitted Artists
+The programme splits artists with delimiters, so single artist with these delimiters in name will be splitted unintendedly.
+1. Goto settings page.
+2. Add a new artist with the single artist's name (e.g. A&B/C)
+3. Perform merge artist by name (or by uuid if you want) multiple times. (e.g. 1. merge A&B/C with A 2. merge A&B/C with B 3. merge A&B/C with C)
 
 #### Webui
-1. webui is avaliable at http://server_address:5010/
+1. Webui is avaliable at http://server_address:5010/
 
 #### API
 1. APIs are at http://server_address:5010/api/
