@@ -10,13 +10,14 @@ A music library server, including server, cli client, and webui. Supports muitip
 https://github.com/yuygfgg/easy_musiclib/assets/140488233/9d9ad2b4-c3d5-4b4a-9faa-0ac6fe2a8cd8
 
 
-![IMG_4978](https://github.com/user-attachments/assets/58a0a81e-7252-42e0-a417-b976523a5fb6)
-![IMG_4977](https://github.com/user-attachments/assets/1fe42564-8a64-41f4-b85d-5d6d373ecfad)
+<img width="1102" alt="截屏2024-08-09 20 28 06" src="https://github.com/user-attachments/assets/135cb234-4de0-47ea-bd65-ae1dd5fd1eeb">
+<img width="1104" alt="截屏2024-08-09 20 28 24" src="https://github.com/user-attachments/assets/553fc817-53ed-44c1-97f4-641df6e341e5">
+<img width="1270" alt="截屏2024-08-09 20 31 02" src="https://github.com/user-attachments/assets/4e1d30d2-e49f-4bef-aa4c-15bb53d257fa">
+<img width="1273" alt="截屏2024-08-09 20 33 30" src="https://github.com/user-attachments/assets/ba397058-4579-46c2-be78-c5fbd0626bd6">
+<img width="1270" alt="截屏2024-08-09 20 33 55" src="https://github.com/user-attachments/assets/ffa418fa-6450-4ef0-b2ea-e60c93eef61f">
+<img width="1263" alt="截屏2024-08-09 20 36 02" src="https://github.com/user-attachments/assets/d1b853ca-3e24-41cd-ae67-653e1bd259ab">
+<img width="1266" alt="截屏2024-08-09 20 39 39" src="https://github.com/user-attachments/assets/7dd60dc4-29e1-4ef5-ba81-fb2637d1f1c3">
 
-<img width="1460" alt="截屏2024-07-18 19 43 47" src="https://github.com/user-attachments/assets/bc1150d4-5cca-425d-a26d-d55621a77fdf">
-<img width="1863" alt="截屏2024-07-01 21 07 41" src="https://github.com/yuygfgg/easy_musiclib/assets/140488233/77a8b735-4dba-45d3-83a3-99a6310f1cb2">
-<img width="1865" alt="截屏2024-07-01 21 09 07" src="https://github.com/yuygfgg/easy_musiclib/assets/140488233/934f6f9f-5e67-41f0-85bb-b0d2caf4191f">
-<img width="1860" alt="截屏2024-07-01 21 10 09" src="https://github.com/yuygfgg/easy_musiclib/assets/140488233/7350dadd-312d-432d-8bc6-fa5f98749311">
 
 ### Schedual
 
