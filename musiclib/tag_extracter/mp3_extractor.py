@@ -1,4 +1,6 @@
 from mutagen.easyid3 import EasyID3
+
+from musiclib import utils
 from . import TagExtractor
 
 class Mp3Extractor(TagExtractor):
@@ -19,6 +21,7 @@ class Mp3Extractor(TagExtractor):
             track_number = int(audio.get('tracknumber', ['1'])[0].split('/')[0])
             disc_number = int(audio.get('discnumber', ['1'])[0].split('/')[0])
             year = audio.get('date', [None])[0]
+            year = utils.extract_year(year)
 
             return {
                 'title': title,
