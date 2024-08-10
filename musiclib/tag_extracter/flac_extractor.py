@@ -13,10 +13,12 @@ class FlacExtractor(TagExtractor):
             if isinstance(artists, str):
                 artists = [artists]
 
-            album_artists = audio.get('albumartist', artists)
+            album_artists = audio.get('albumartist')
+            if not album_artists:
+                album_artists = audio.get('album artist', artists)
             if isinstance(album_artists, str):
                 album_artists = [album_artists]
-
+                
             track_number = int(audio.get('tracknumber', ['1'])[0].split('/')[0])
             disc_number = int(audio.get('discnumber', ['1'])[0].split('/')[0])
             year = audio.get('date', [None])[0] or audio.get('year', [None])[0]
