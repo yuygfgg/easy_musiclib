@@ -643,6 +643,10 @@
 
         function startLrcSync() {
             const audioPlayer = document.getElementById("audio-player");
+            if (audioPlayer.paused) {
+                const currentTime = audioPlayer.currentTime * 1000;
+                lrc.play(currentTime);
+            }
             audioPlayer.ontimeupdate = () => {
                 const currentTime = audioPlayer.currentTime * 1000; // 转换为毫秒
                 document.getElementById("playing-time").textContent = formatTime(
@@ -650,9 +654,6 @@
                 );
                 const progressPercent =
                     (audioPlayer.currentTime / audioPlayer.duration) * 100;
-                document.getElementById(
-                    "progress"
-                ).style.width = `${progressPercent}%`;
                 lrc.play(currentTime);
             };
             audioPlayer.onpause = () => {
@@ -831,6 +832,7 @@
             const currentTime = audioPlayer.currentTime * 1000; // 转换为毫秒
             lrc.play(currentTime);
             lrc.pause();
+        
         }
         function closeSongPopup() {
             document.getElementById("song-popup").style.display = "none";
