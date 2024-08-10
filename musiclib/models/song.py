@@ -14,7 +14,7 @@ class Song:
         self.disc_number = disc_number
         self.is_liked = False
         self.liked_time = None
-        self.song_art_path = self.song_art_path = song_art_path or self.find_art_path(file_path)
+        self.song_art_path = (song_art_path or self.find_art_path(file_path)).strip()
         self.year = year
         self.event = {'uuid': event.uuid if event else None, 'name': event.name if event else None}
 

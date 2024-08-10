@@ -149,7 +149,7 @@ def load_library():
                         event.uuid = event_data['uuid']
                     song = Song(
                         song_data['name'], album, artists, song_data['file_path'],
-                        song_data['track_number'], song_data['disc_number'], song_data['year'], song_data.get('song_art_path'),
+                        song_data['track_number'], song_data['disc_number'], song_data['year'], song_data.get('song_art_path') or " ",
                         event
                     )
                     song.uuid = song_data['uuid']

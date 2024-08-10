@@ -79,11 +79,11 @@ def combined_score(attribute, query):
     length_score = max(0, (1 - abs(len(attribute) - len(query)) / len(query)) * 100)
     return match_score * 0.7 + length_score * 0.3
 
-def calculate_scores(items, attribute_getter, query, cc):
+def calculate_scores(items, attribute_getter, query):
     with Pool(cpu_count()) as pool:
         scores = pool.starmap(
             combined_score,
-            [(attribute_getter(item), query, cc) for item in items]
+            [(attribute_getter(item), query) for item in items]
         )
     return scores
     

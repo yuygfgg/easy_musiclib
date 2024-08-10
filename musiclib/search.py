@@ -9,12 +9,12 @@ class MusicLibrarySearch:
     
     @lru_cache(maxsize=None)
     def search(self, query):
-        normalized_query = self.library.normalize_name(query, True)
+        normalized_query = utils.normalize_name(query, True)
         print(normalized_query)
             
-        song_scores = utils.calculate_scores(self.library.songs.values(), utils.get_song_name, normalized_query, self.library.cc)
-        album_scores = utils.calculate_scores(self.library.albums.values(), utils.get_album_name, normalized_query, self.library.cc)
-        artist_scores = utils.calculate_scores(self.library.artists.values(), utils.get_artist_name, normalized_query, self.library.cc)
+        song_scores = utils.calculate_scores(self.library.songs.values(), utils.get_song_name, normalized_query)
+        album_scores = utils.calculate_scores(self.library.albums.values(), utils.get_album_name, normalized_query)
+        artist_scores = utils.calculate_scores(self.library.artists.values(), utils.get_artist_name, normalized_query)
 
         matched_songs = [(song, score) for song, score in zip(self.library.songs.values(), song_scores) if score > 50]
         matched_albums = [(album, score) for album, score in zip(self.library.albums.values(), album_scores) if score > 50]
