@@ -54,6 +54,7 @@ class <Format>Extractor(TagExtractor):
             track_number = int(audio.get('tracknumber', ['1'])[0])
             disc_number = int(audio.get('discnumber', ['1'])[0])
             year = audio.get('date', [None])[0] or audio.get('year', [None])[0]
+            year = utils.extract_year(year)
             event = audio.get('event', ['Unknown Event'])[0]
 
             return {
