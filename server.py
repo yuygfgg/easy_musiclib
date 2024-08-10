@@ -324,34 +324,6 @@ def scan():
     save_library()
     return jsonify({'message': 'Scan completed'}), 200
 
-@app.route('/api/search_song/<name>', methods=['GET'])
-def search_song(name):
-    song = library.search_song(name)
-    if song:
-        return jsonify({'name': song.name, 'uuid': song.uuid}), 200
-    return jsonify({'message': 'Song not found'}), 404
-
-@app.route('/api/search_album/<name>', methods=['GET'])
-def search_album(name):
-    album = library.search_album(name)
-    if album:
-        return jsonify({'name': album.name, 'uuid': album.uuid}), 200
-    return jsonify({'message': 'Album not found'}), 404
-
-@app.route('/api/search_artist/<name>', methods=['GET'])
-def search_artist(name):
-    artist = library.search_artist(name)
-    if artist:
-        return jsonify({'name': artist.name, 'uuid': artist.uuid}), 200
-    return jsonify({'message': 'Artist not found'}), 404
-
-@app.route('/api/search_event/<name>/<year>', methods=['GET'])
-def search_event(name, year):
-    event = library.search_event(name, year)
-    if event:
-        return jsonify({'name': event.name, 'uuid': event.uuid, 'year': event.year}), 200
-    return jsonify({'message': 'Event not found'}), 404
-
 @app.route('/api/show_event/<uuid>', methods=['GET'])
 def show_event(uuid):
     event = library.events.get(uuid)
@@ -504,7 +476,7 @@ def show_artist(uuid):
 
 @app.route('/api/search/<query>', methods=['GET'])
 def search(query):
-    results = library.search(query)
+    results = library.searcher.search(query)
     return jsonify({
         'songs': [{
             'name': song.name,
