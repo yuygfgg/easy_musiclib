@@ -10,6 +10,7 @@ class Event:
         self.liked_time = None
         self.albums = []
         self.year = None
+        self.date = None
 
     def like(self):
         self.is_liked = True
@@ -20,8 +21,12 @@ class Event:
         self.is_liked = False
         print(f"Event {self.name} unliked.")
 
-    def update_year(self):
+    def update_year_date(self):
         if self.year is None:
             for album in self.albums:
                 if album.year is not None:
                     self.year = album.year
+        if self.date is None:
+            for album in self.albums:
+                if album.date is not None:
+                    self.date = album.date

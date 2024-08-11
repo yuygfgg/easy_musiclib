@@ -14,51 +14,6 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 static_folder = os.path.join(current_dir, "webui")
 
 
-@app.route("/api/add_event", methods=["GET"])
-def add_event():
-    name = request.args.get("name")
-    year = request.args.get("year")
-    event = Event(name, year)
-    library.add_event(event)
-    save_library(library)
-    return jsonify(
-        {"message": "Event added", "uuid": event.uuid, "year": event.year}
-    ), 201
-
-
-@app.route("/api/add_song", methods=["GET"])
-def add_song():
-    name = request.args.get("name")
-    album_uuid = request.args.get("album_uuid")
-    artist_uuids = request.args.getlist("artist_uuids")
-    file_path = request.args.get("file_path")
-    track_number = int(request.args.get("track_number", 1))
-    disc_number = int(request.args.get("disc_number", 1))
-    year = request.args.get("year")
-
-    album = library.goto_album(album_uuid)
-    artists = [library.goto_artist(uuid) for uuid in artist_uuids]
-
-    song = Song(name, album, artists, file_path, track_number, disc_number, year)
-    library.add_song(song)
-    album.update_year()
-    save_library(library)
-    return jsonify({"message": "Song added", "uuid": song.uuid, "year": song.year}), 201
-
-
-@app.route("/api/add_album", methods=["GET"])
-def add_album():
-    name = request.args.get("name")
-    year = request.args.get("year")
-    album = Album(name)
-    album.year = year
-    library.add_album(album)
-    save_library(library)
-    return jsonify(
-        {"message": "Album added", "uuid": album.uuid, "year": album.year}
-    ), 201
-
-
 @app.route("/api/add_artist", methods=["GET"])
 def add_artist():
     name = request.args.get("name")
@@ -150,6 +105,7 @@ def show_event(uuid):
                 "name": event.name,
                 "uuid": event.uuid,
                 "year": event.year,
+                "date": event.date,
                 "albums": [
                     {
                         "name": album.name,
@@ -191,6 +147,7 @@ def show_library():
                     "name": album.name,
                     "uuid": album.uuid,
                     "year": album.year,
+                    "date": album.date,
                     "album_art_path": album.album_art_path,
                     "is_liked": album.is_liked,
                     "liked_time": album.liked_time,
@@ -218,6 +175,7 @@ def show_liked_events():
             "name": event.name,
             "uuid": event.uuid,
             "year": event.year,
+            "date": event.date,
             "albums": [
                 {"name": album.name, "uuid": album.uuid} for album in event.albums
             ],
@@ -272,6 +230,7 @@ def show_liked_albums():
             "name": album.name,
             "uuid": album.uuid,
             "year": album.year,
+            "date": album.date,
             "album_art_path": album.album_art_path,
             "is_liked": album.is_liked,
             "liked_time": album.liked_time,
@@ -299,6 +258,7 @@ def show_song(uuid):
                 "liked_time": song.liked_time,
                 "song_art_path": song.song_art_path,
                 "year": song.year,
+                "date": song.date,
                 "event": song.event,
             }
         ), 200
@@ -334,6 +294,7 @@ def show_album(uuid):
                 "liked_time": album.liked_time,
                 "album_art_path": album.album_art_path,
                 "year": album.year,
+                "date": album.date,
                 "event": album.event,
             }
         ), 200
@@ -350,6 +311,7 @@ def show_artist(uuid):
                     "name": album.name,
                     "uuid": album.uuid,
                     "year": album.year,
+                    "date": album.date,
                     "album_art_path": album.album_art_path,
                     "is_liked": album.is_liked,
                 }
@@ -412,6 +374,7 @@ def search(query):
                     "name": album.name,
                     "uuid": album.uuid,
                     "year": album.year,
+                    "date": album.date,
                     "album_art_path": album.album_art_path,
                     "is_liked": album.is_liked,
                     "liked_time": album.liked_time,

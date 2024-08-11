@@ -55,6 +55,7 @@
 <body>
     <div class="container">
         <h1 class="my-4">Event <span id="event-name"></span></h1>
+        <h1 class="my-4">Date <span id="event-date"></span></h1>
         <div id="album-list" class="row"></div>
     </div>
 
@@ -69,7 +70,7 @@
                 .then(data => {
                     if (data) {
                         document.getElementById('event-name').textContent = data.name;
-
+                        document.getElementById('event-date').textContent = data.date;
                         if (data.albums) {
                             data.albums.forEach(album => {
                                 const albumItem = document.createElement('div');
@@ -79,7 +80,7 @@
 
                                 const albumArt = document.createElement('img');
                                 albumArt.src = albumArtUrl;
-                                albumArt.alt = '专辑封面';
+                                albumArt.alt = 'Album Art';
                                 albumArt.className = 'album-art';
 
                                 const albumInfo = document.createElement('div');

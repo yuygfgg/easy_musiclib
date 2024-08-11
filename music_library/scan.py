@@ -72,6 +72,7 @@ class MusicLibraryScan:
             track_number = tags["track_number"]
             disc_number = tags["disc_number"]
             year = tags["year"]
+            date = tags["date"]
             event_name = (
                 tags["event"][0].strip()
                 if isinstance(tags["event"], list)
@@ -100,15 +101,16 @@ class MusicLibraryScan:
                 track_number,
                 disc_number,
                 year,
+                date,
                 song_art_path,
                 event,
             )
             self.add_song(song)
             album.songs.append(song)
-            album.update_year()
+            album.update_year_date()
             album.update_event()
             if event:
-                event.update_year()
+                event.update_year_date()
 
             self.update_art_paths(album, song, song_artists)
 

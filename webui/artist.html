@@ -202,8 +202,8 @@
         
             // 专辑排序逻辑
             const sortedAlbums = albumsWithArt.sort((a, b) => {
-                if (a.year !== b.year) {
-                    return b.year - a.year;
+                if (a.date !== b.date) {
+                    return b.date - a.date;
                 } else {
                     return 0;
                 }
@@ -237,12 +237,12 @@
                 albumName.className = "card-title";
                 albumName.textContent = album.name;
         
-                const albumYear = document.createElement("p");
-                albumYear.className = "card-text";
-                albumYear.textContent = album.year;
+                const albumDate = document.createElement("p");
+                albumDate.className = "card-text";
+                albumDate.textContent = album.date;
         
                 cardBody.appendChild(albumName);
-                cardBody.appendChild(albumYear);
+                cardBody.appendChild(albumDate);
                 card.appendChild(albumArt);
                 card.appendChild(cardBody);
                 albumItem.appendChild(card);

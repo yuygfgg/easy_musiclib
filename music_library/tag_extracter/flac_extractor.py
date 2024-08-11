@@ -24,7 +24,7 @@ class FlacExtractor(TagExtractor):
             disc_number = int(audio.get("discnumber", ["1"])[0].split("/")[0])
             year = audio.get("date", [None])[0] or audio.get("year", [None])[0]
             year = utils.extract_year(year)
-
+            date = audio.get("date", year)[0]
             return {
                 "title": title,
                 "album": album,
@@ -32,6 +32,7 @@ class FlacExtractor(TagExtractor):
                 "album_artists": album_artists,
                 "track_number": track_number,
                 "disc_number": disc_number,
+                "date": date,
                 "year": year,
                 "event": event,
             }
@@ -46,5 +47,6 @@ class FlacExtractor(TagExtractor):
                 "track_number": 1,
                 "disc_number": 1,
                 "event": "Unknown Event",
+                "date": None,
                 "year": None,
             }
