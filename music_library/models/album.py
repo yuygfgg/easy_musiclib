@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 
+
 class Album:
     def __init__(self, name):
         self.name = name
@@ -11,7 +12,7 @@ class Album:
         self.liked_time = None
         self.album_art_path = ""
         self.year = None
-        self.event = {'uuid': None, 'name': None}
+        self.event = {"uuid": None, "name": None}
 
     def like(self):
         self.is_liked = True
@@ -28,10 +29,10 @@ class Album:
                 if song.year:
                     self.year = song.year
                     break
-    
+
     def update_event(self):
-        if not self.event['uuid'] and self.songs:
+        if not self.event["uuid"] and self.songs:
             for song in self.songs:
-                if song.event['uuid']:
+                if song.event["uuid"]:
                     self.event = song.event
                     break

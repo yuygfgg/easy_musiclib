@@ -3,12 +3,13 @@ import os
 import csv
 from functools import lru_cache
 
-from musiclib import utils
+from music_library import utils
 
 from .tag_extracter import TagExtractor
 from .models import Album, Artist, Event, Song
 from .display import MusicLibraryDisplay
 from .search import MusicLibrarySearch
+
 
 class MusicLibrary:
     def __init__(self):
@@ -20,7 +21,7 @@ class MusicLibrary:
         self.searcher = MusicLibrarySearch(self)
         self.graph = {}
         self.extractors = self.load_extractors()
-    
+
     def __getstate__(self):
         # 获取对象的状态，并移除不可序列化的部分
         state = self.__dict__.copy()
@@ -28,18 +29,24 @@ class MusicLibrary:
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-    
+
     def load_extractors(self):
         extractors = {}
-        for file in os.listdir('musiclib/tag_extracter'):
-            if file.endswith('_extractor.py'):
+        for file in os.listdir("music_library/tag_extracter"):
+            if file.endswith("_extractor.py"):
                 module_name = file[:-3]
-                module = importlib.import_module(f'musiclib.tag_extracter.{module_name}')
+                module = importlib.import_module(
+                    f"music_library.tag_extracter.{module_name}"
+                )
                 for attr in dir(module):
                     cls = getattr(module, attr)
-                    if isinstance(cls, type) and issubclass(cls, TagExtractor) and cls is not TagExtractor:
+                    if (
+                        isinstance(cls, type)
+                        and issubclass(cls, TagExtractor)
+                        and cls is not TagExtractor
+                    ):
                         # Extract the extension from the module name
-                        extension = module_name.split('_')[0]
+                        extension = module_name.split("_")[0]
                         extractors[extension] = cls()
         return extractors
 
@@ -58,7 +65,7 @@ class MusicLibrary:
 
     def add_artist(self, artist):
         self.artists[artist.uuid] = artist
-    
+
     def add_event(self, event):
         self.events[event.uuid] = event
 
@@ -84,18 +91,35 @@ class MusicLibrary:
             if album.name == name:
                 return album
         return None
-    
+
     @lru_cache(maxsize=None)
-    def find_album_by_name_artist_year(self, name, album_artist_names, year, album_artist_tag):
-        album_artist_names_set = {utils.normalize_name(album_artist_name) for album_artist_name in album_artist_names}
+    def find_album_by_name_artist_year(
+        self, name, album_artist_names, year, album_artist_tag
+    ):
+        album_artist_names_set = {
+            utils.normalize_name(album_artist_name)
+            for album_artist_name in album_artist_names
+        }
         if not album_artist_tag:
             album_artist_names = None
             album_artist_names_set = None
         for album in self.albums.values():
-            album_artist_names_set_in_album = {utils.normalize_name(artist.name) for artist in album.album_artists}
-            if ((utils.normalize_name(album.name) == utils.normalize_name(name) or album.name is None or name is None) and
-                (album.year == year or album.year is None or year is None) and
-                (album_artist_names_set == album_artist_names_set_in_album or not album_artist_names or not album.album_artists)):
+            album_artist_names_set_in_album = {
+                utils.normalize_name(artist.name) for artist in album.album_artists
+            }
+            if (
+                (
+                    utils.normalize_name(album.name) == utils.normalize_name(name)
+                    or album.name is None
+                    or name is None
+                )
+                and (album.year == year or album.year is None or year is None)
+                and (
+                    album_artist_names_set == album_artist_names_set_in_album
+                    or not album_artist_names
+                    or not album.album_artists
+                )
+            ):
                 return album
         return None
 
@@ -111,14 +135,14 @@ class MusicLibrary:
 
     def goto_artist(self, artist_uuid):
         return self.artists.get(artist_uuid, None)
-    
+
     def goto_song(self, song_uuid):
         return self.songs.get(song_uuid, None)
-    
+
     def scan(self, directory):
         scanned_count = 0
         existing_files = {song.file_path for song in self.songs.values()}
-        
+
         for root, dirs, files in os.walk(directory):
             for file in files:
                 file_path = os.path.join(root, file)
@@ -139,29 +163,47 @@ class MusicLibrary:
             tags = self.extract_tags(file_path)
             if not tags:
                 return
-            
-            song_name = tags['title'].strip()
-            album_name = tags['album'].strip()
-            artist_names = self.parse_artists(tags['artists'])
-            album_artist_names = self.parse_artists(tags.get('album_artists', artist_names))
-            track_number = tags['track_number']
-            disc_number = tags['disc_number']
-            year = tags['year']
-            event_name = tags['event'][0].strip() if isinstance(tags['event'], list) else tags['event'].strip()
+
+            song_name = tags["title"].strip()
+            album_name = tags["album"].strip()
+            artist_names = self.parse_artists(tags["artists"])
+            album_artist_names = self.parse_artists(
+                tags.get("album_artists", artist_names)
+            )
+            track_number = tags["track_number"]
+            disc_number = tags["disc_number"]
+            year = tags["year"]
+            event_name = (
+                tags["event"][0].strip()
+                if isinstance(tags["event"], list)
+                else tags["event"].strip()
+            )
 
             if album_artist_names == artist_names:
                 album_artist_tag = False
-            
+
             # Handle album and artists
-            album = self.find_or_create_album(album_name, album_artist_names, year, album_artist_tag)
+            album = self.find_or_create_album(
+                album_name, album_artist_names, year, album_artist_tag
+            )
             song_artists = self.find_or_create_artists(artist_names)
-            
+
             # Handle event
             event = self.find_or_create_event(event_name, album)
-            
+
             song_art_path = album.album_art_path if album.album_art_path else None
 
-            song = Song(song_name, album, song_artists, file_path, track_number, disc_number, year, song_art_path, event)
+            song = Song(
+                song_name,
+                album,
+                song_artists,
+                file_path,
+                track_number,
+                disc_number,
+                year,
+                song_art_path,
+                event,
+            )
             self.add_song(song)
             album.songs.append(song)
             album.update_year()
@@ -175,8 +217,12 @@ class MusicLibrary:
             print(f"Error processing file {file_path}: {e}")
             raise
 
-    def find_or_create_album(self, album_name, album_artist_names, year, album_artist_tag):
-        album = self.find_album_by_name_artist_year(album_name, tuple(album_artist_names), year, album_artist_tag)
+    def find_or_create_album(
+        self, album_name, album_artist_names, year, album_artist_tag
+    ):
+        album = self.find_album_by_name_artist_year(
+            album_name, tuple(album_artist_names), year, album_artist_tag
+        )
         if not album:
             print(f"Adding new album {album_name}.")
             album = Album(album_name)
@@ -215,8 +261,8 @@ class MusicLibrary:
             self.add_event(event)
         if album not in event.albums:
             event.albums.append(album)
-        if not album.event or not album.event['uuid']:
-            album.event = {'uuid': event.uuid, 'name': event.name}
+        if not album.event or not album.event["uuid"]:
+            album.event = {"uuid": event.uuid, "name": event.name}
         return event
 
     def update_art_paths(self, album, song, song_artists):
@@ -228,7 +274,7 @@ class MusicLibrary:
                     for s in album.songs:
                         if not s.song_art_path:
                             s.song_art_path = album.album_art_path
-                                
+
         for artist in album.album_artists:
             if not artist.artist_art_path:
                 artist.artist_art_path = album.album_art_path
@@ -239,10 +285,22 @@ class MusicLibrary:
                 if not artist.artist_art_path:
                     artist.artist_art_path = song.song_art_path
 
-
     def parse_artists(self, artists):
-        delimiters = ('/', '／', '&', '＆', ' x ', ';', '；', ',', '，', '×', '　', '、')
-        ignore = ['cool&create', 'Factory Noise&AG', 'Sing, R. Sing!']
+        delimiters = (
+            "/",
+            "／",
+            "&",
+            "＆",
+            " x ",
+            ";",
+            "；",
+            ",",
+            "，",
+            "×",
+            "　",
+            "、",
+        )
+        ignore = ["cool&create", "Factory Noise&AG", "Sing, R. Sing!"]
         ignore_normalized = [utils.normalize_name(item) for item in ignore]
         parsed_artists = []
 
@@ -255,8 +313,10 @@ class MusicLibrary:
                     ignored_index = artist_normalized.find(ignored)
                     if ignored_index != -1:
                         pre_ignored = artist[:ignored_index].strip()
-                        ignored_part = artist[ignored_index:ignored_index + len(ignored)]
-                        post_ignored = artist[ignored_index + len(ignored):].strip()
+                        ignored_part = artist[
+                            ignored_index : ignored_index + len(ignored)
+                        ]
+                        post_ignored = artist[ignored_index + len(ignored) :].strip()
 
                         if pre_ignored:
                             parts.extend(utils.split_and_clean(pre_ignored, delimiters))
@@ -271,25 +331,25 @@ class MusicLibrary:
             parsed_artists.extend(parts)
 
         return parsed_artists
-    
+
     def auto_merge(self):
-        file_path = os.path.join(os.getcwd(), 'artist_alias.csv')
-        
+        file_path = os.path.join(os.getcwd(), "artist_alias.csv")
+
         if not os.path.isfile(file_path):
             print("File artist_alias.csv not found in the current directory.")
             return
 
-        with open(file_path, newline='', encoding='utf-8-sig') as csvfile:
+        with open(file_path, newline="", encoding="utf-8-sig") as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
                 print(f"Processing row: {row}")
                 if len(row) < 2:
                     print(f"Skipping row with insufficient data: {row}")
                     continue
-                
+
                 primary_artist_name = row[0].strip()
                 primary_artist = self.find_artist_by_name(primary_artist_name)
-                
+
                 if not primary_artist:
                     print(f"Primary artist '{primary_artist_name}' not found.")
                     continue
@@ -297,20 +357,26 @@ class MusicLibrary:
                 for alias in row[1:]:
                     alias_name = alias.strip()
                     alias_artist = self.find_artist_by_name(alias_name)
-                    
+
                     if not alias_artist:
                         print(f"Alias artist '{alias_name}' not found.")
                         continue
-                    
+
                     if primary_artist_name.lower() != alias_name.lower():
-                        print(f"Merging alias artist '{alias_name}' into primary artist '{primary_artist_name}'")
+                        print(
+                            f"Merging alias artist '{alias_name}' into primary artist '{primary_artist_name}'"
+                        )
                         self.merge_artist_by_name(primary_artist_name, alias_name)
-                        print(f"Successfully merged '{alias_name}' into '{primary_artist_name}'")
+                        print(
+                            f"Successfully merged '{alias_name}' into '{primary_artist_name}'"
+                        )
 
         for event in self.events.values():
             for album in event.albums:
                 if album.year is None:
-                    print(f"Setting year for album {album.name} and its songs to {event.year}")
+                    print(
+                        f"Setting year for album {album.name} and its songs to {event.year}"
+                    )
                     album.year = event.year
                     for song in album.songs:
                         song.year = event.year
@@ -319,22 +385,23 @@ class MusicLibrary:
             if album.album_art_path:
                 for song in album.songs:
                     if not song.song_art_path:
-                        print(f"Setting song art for song {song.name} to album art {album.album_art_path}")
+                        print(
+                            f"Setting song art for song {song.name} to album art {album.album_art_path}"
+                        )
                         song.song_art_path = album.album_art_path
-
 
     def merge_artist_by_uuid(self, uuid1, uuid2):
         if uuid1 not in self.artists or uuid2 not in self.artists:
             print(f"One or both artist UUIDs not found: uuid1={uuid1}, uuid2={uuid2}")
             return
-        
+
         artist1 = self.artists[uuid1]
         artist2 = self.artists[uuid2]
-        
+
         # Update artist_art
         if artist1.artist_art_path == "" and artist2.artist_art_path != "":
             self.artists[uuid1].artist_art_path = self.artists[uuid2].artist_art_path
-        
+
         # Update albums
         for album in self.albums.values():
             if artist2 in album.album_artists:
@@ -347,17 +414,17 @@ class MusicLibrary:
         for song in self.songs.values():
             artist_updated = False
             for artist in song.artists:
-                if artist['uuid'] == uuid2:
-                    artist['uuid'] = uuid1
-                    artist['name'] = artist1.name
+                if artist["uuid"] == uuid2:
+                    artist["uuid"] = uuid1
+                    artist["name"] = artist1.name
                     artist_updated = True
 
-            if artist_updated and song.album['uuid'] in self.albums:
-                    album = self.albums[song.album['uuid']]
-                    for album_artist in album.album_artists:
-                        if album_artist.uuid == uuid2:
-                            album_artist.uuid = uuid1
-                            album_artist.name = artist1.name
+            if artist_updated and song.album["uuid"] in self.albums:
+                album = self.albums[song.album["uuid"]]
+                for album_artist in album.album_artists:
+                    if album_artist.uuid == uuid2:
+                        album_artist.uuid = uuid1
+                        album_artist.name = artist1.name
 
         # Update graph
         if uuid2 in self.graph:
@@ -367,16 +434,16 @@ class MusicLibrary:
                 if neighbor not in self.graph[uuid1]:
                     self.graph[uuid1][neighbor] = data
                 else:
-                    self.graph[uuid1][neighbor]['strength'] += data['strength']
-                    self.graph[uuid1][neighbor]['details'].update(data['details'])
+                    self.graph[uuid1][neighbor]["strength"] += data["strength"]
+                    self.graph[uuid1][neighbor]["details"].update(data["details"])
                 if neighbor in self.graph:
                     if uuid2 in self.graph[neighbor]:
                         del self.graph[neighbor][uuid2]
                     if uuid1 not in self.graph[neighbor]:
                         self.graph[neighbor][uuid1] = data
                     else:
-                        self.graph[neighbor][uuid1]['strength'] += data['strength']
-                        self.graph[neighbor][uuid1]['details'].update(data['details'])
+                        self.graph[neighbor][uuid1]["strength"] += data["strength"]
+                        self.graph[neighbor][uuid1]["details"].update(data["details"])
             del self.graph[uuid2]
 
         del self.artists[uuid2]
@@ -385,7 +452,7 @@ class MusicLibrary:
     def merge_artist_by_name(self, name1, name2):
         artist1 = self.find_artist_by_name(name1)
         artist2 = self.find_artist_by_name(name2)
-        
+
         if not artist1 or not artist2:
             print(f"One or both artists not found: name1={name1}, name2={name2}")
             return
@@ -402,7 +469,7 @@ class MusicLibrary:
             song.like()
         else:
             print(f"Song {uuid} not found.")
-    
+
     def unlike_song(self, uuid):
         song = self.songs.get(uuid)
         if song:
@@ -416,7 +483,7 @@ class MusicLibrary:
             artist.like()
         else:
             print(f"Artist {uuid} not found.")
-    
+
     def unlike_artist(self, uuid):
         artist = self.artists.get(uuid)
         if artist:
@@ -437,10 +504,10 @@ class MusicLibrary:
             album.unlike()
         else:
             print(f"Album {uuid} not found.")
-    
+
     def build_graph(self):
         graph = {}
-        
+
         def add_edge(a, b, relation):
             if a not in graph:
                 graph[a] = {}
@@ -457,35 +524,51 @@ class MusicLibrary:
 
         # 遍历所有歌曲
         for song in self.songs.values():
-            artist_uuids = [artist['uuid'] for artist in song.artists if artist['name'].lower() != 'various artists']
+            artist_uuids = [
+                artist["uuid"]
+                for artist in song.artists
+                if artist["name"].lower() != "various artists"
+            ]
             for i in range(len(artist_uuids)):
                 for j in range(i + 1, len(artist_uuids)):
                     a, b = artist_uuids[i], artist_uuids[j]
                     add_edge(a, b, f"same song: {song.name} ({song.uuid})")
-                    
+
         # 遍历所有专辑
         for album in self.albums.values():
-            album_artist_uuids = [artist.uuid for artist in album.album_artists if artist.name.lower() != 'various artists']
-            
+            album_artist_uuids = [
+                artist.uuid
+                for artist in album.album_artists
+                if artist.name.lower() != "various artists"
+            ]
+
             # 专辑艺术家之间的关系
             for i in range(len(album_artist_uuids)):
                 for j in range(i + 1, len(album_artist_uuids)):
                     a, b = album_artist_uuids[i], album_artist_uuids[j]
                     add_edge(a, b, f"same album: {album.name} ({album.uuid})")
-            
+
             # 专辑中的歌曲艺术家之间的关系
             for song in album.songs:
-                song_artist_uuids = [artist['uuid'] for artist in song.artists if artist['name'].lower() != 'various artists']
+                song_artist_uuids = [
+                    artist["uuid"]
+                    for artist in song.artists
+                    if artist["name"].lower() != "various artists"
+                ]
                 for i in range(len(song_artist_uuids)):
                     for j in range(i + 1, len(song_artist_uuids)):
                         a, b = song_artist_uuids[i], song_artist_uuids[j]
                         add_edge(a, b, f"same song: {song.name} ({song.uuid})")
-                
+
                 # 专辑艺术家与歌曲艺术家之间的关系
                 for album_artist_uuid in album_artist_uuids:
                     for song_artist_uuid in song_artist_uuids:
                         if album_artist_uuid != song_artist_uuid:
-                            add_edge(album_artist_uuid, song_artist_uuid, f"album artist with song artist: {album.name} ({album.uuid})")
+                            add_edge(
+                                album_artist_uuid,
+                                song_artist_uuid,
+                                f"album artist with song artist: {album.name} ({album.uuid})",
+                            )
         return graph
 
     def find_relation(self, artist_uuid, graph):
@@ -500,12 +583,14 @@ class MusicLibrary:
             if target not in visited:
                 nodes.append({"uuid": target, "name": self.artists[target].name})
                 visited.add(target)
-            edges.append({
-                "source": source,
-                "target": target,
-                "strength": data["strength"],
-                "details": list(data["details"])
-            })
+            edges.append(
+                {
+                    "source": source,
+                    "target": target,
+                    "strength": data["strength"],
+                    "details": list(data["details"]),
+                }
+            )
 
         for neighbor, data in graph.get(artist_uuid, {}).items():
             add_node_and_edge(artist_uuid, neighbor, data)
@@ -515,7 +600,7 @@ class MusicLibrary:
                 add_node_and_edge(neighbor, artist_uuid, data)
 
         return {"nodes": nodes, "edges": edges}
-    
+
     def show_relation(self, artist_uuid, layer):
         graph = self.graph
 
@@ -530,21 +615,33 @@ class MusicLibrary:
                     if b not in self.artists:
                         continue
                     nodes.append({"uuid": b, "name": self.artists[b].name})
-                    edges.append({
-                        "source": a,
-                        "target": b,
-                        "strength": data["strength"],
-                        "details": list(data["details"])
-                    })
-            unique_nodes = {node['uuid']: node for node in nodes}
-            unique_edges = {tuple(sorted([edge['source'], edge['target']])): edge for edge in edges}
-            return {"nodes": list(unique_nodes.values()), "edges": list(unique_edges.values())}
+                    edges.append(
+                        {
+                            "source": a,
+                            "target": b,
+                            "strength": data["strength"],
+                            "details": list(data["details"]),
+                        }
+                    )
+            unique_nodes = {node["uuid"]: node for node in nodes}
+            unique_edges = {
+                tuple(sorted([edge["source"], edge["target"]])): edge for edge in edges
+            }
+            return {
+                "nodes": list(unique_nodes.values()),
+                "edges": list(unique_edges.values()),
+            }
 
         if layer == 1:
             return self.find_relation(artist_uuid, graph)
 
         if layer < 1:
-            return {"nodes": [{"uuid": artist_uuid, "name": self.artists[artist_uuid].name}], "edges": []}
+            return {
+                "nodes": [
+                    {"uuid": artist_uuid, "name": self.artists[artist_uuid].name}
+                ],
+                "edges": [],
+            }
 
         all_nodes = [{"uuid": artist_uuid, "name": self.artists[artist_uuid].name}]
         all_edges = []
@@ -568,13 +665,19 @@ class MusicLibrary:
                 all_edges.append(edge)
 
         # 去重节点和边
-        unique_nodes = {node['uuid']: node for node in all_nodes}
-        unique_edges = {tuple(sorted([edge['source'], edge['target']])): edge for edge in all_edges}
+        unique_nodes = {node["uuid"]: node for node in all_nodes}
+        unique_edges = {
+            tuple(sorted([edge["source"], edge["target"]])): edge for edge in all_edges
+        }
 
-        return {"nodes": list(unique_nodes.values()), "edges": list(unique_edges.values())}
+        return {
+            "nodes": list(unique_nodes.values()),
+            "edges": list(unique_edges.values()),
+        }
+
 
 if __name__ == "__main__":
     library = MusicLibrary()
-    library.scan('/Users/a1/other')
+    library.scan("/Users/a1/other")
 
     library.display.show_library()

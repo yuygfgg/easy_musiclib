@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 
+
 class Event:
     def __init__(self, name):
         self.name = name
@@ -18,7 +19,7 @@ class Event:
     def unlike(self):
         self.is_liked = False
         print(f"Event {self.name} unliked.")
-        
+
     def update_year(self):
         if self.year is None:
             for album in self.albums:
