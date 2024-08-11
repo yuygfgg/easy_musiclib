@@ -202,11 +202,18 @@
         
             // 专辑排序逻辑
             const sortedAlbums = albumsWithArt.sort((a, b) => {
-                if (a.date !== b.date) {
-                    return b.date - a.date;
-                } else {
-                    return 0;
-                }
+                const parseDate = (dateStr) => {
+                    if (/^\d{4}$/.test(dateStr)) {
+                        return new Date(dateStr, 0, 1);
+                    }
+                    const parsedDate = new Date(dateStr.replace(/\./g, '-'));
+                    return isNaN(parsedDate) ? new Date(0) : parsedDate;
+                };
+            
+                const dateA = parseDate(a.date);
+                const dateB = parseDate(b.date);
+            
+                return dateB - dateA;
             });
         
             // 渲染专辑
