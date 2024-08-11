@@ -22,6 +22,7 @@ This document provides instructions on how to create a new audio tag extractor f
   - `track_number` (int)
   - `disc_number` (int)
   - `year` (int or None)
+  - `date` (str or None)
   - `event` (str or None)
 
 ## Steps to Implement
@@ -59,6 +60,7 @@ class <Format>Extractor(TagExtractor):
             disc_number = int(audio.get('discnumber', ['1'])[0])
             year = audio.get('date', [None])[0] or audio.get('year', [None])[0]
             year = utils.extract_year(year)
+            date = audio.get('date', year)
             event = audio.get('event', ['Unknown Event'])[0]
 
             return {
@@ -69,6 +71,7 @@ class <Format>Extractor(TagExtractor):
                 'track_number': track_number,
                 'disc_number': disc_number,
                 'year': year,
+                'date': date,
                 'event': event
             }
 
@@ -82,6 +85,7 @@ class <Format>Extractor(TagExtractor):
                 'track_number': 1,
                 'disc_number': 1,
                 'year': None,
+                'date': None,
                 'event': 'Unknown Event'
             }
 ```
