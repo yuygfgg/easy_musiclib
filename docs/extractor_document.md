@@ -51,6 +51,10 @@ class <Format>Extractor(TagExtractor):
             if isinstance(artists, str):
                 artists = [artists]
 
+            album_artists = audio.get('albumartist', artists)
+            if isinstance(album_artists, str):
+                album_artists = [album_artists]
+            
             track_number = int(audio.get('tracknumber', ['1'])[0])
             disc_number = int(audio.get('discnumber', ['1'])[0])
             year = audio.get('date', [None])[0] or audio.get('year', [None])[0]
@@ -61,6 +65,7 @@ class <Format>Extractor(TagExtractor):
                 'title': title,
                 'album': album,
                 'artists': artists,
+                'album_artists': album_artists,
                 'track_number': track_number,
                 'disc_number': disc_number,
                 'year': year,
@@ -73,6 +78,7 @@ class <Format>Extractor(TagExtractor):
                 'title': 'Unknown Title',
                 'album': 'Unknown Album',
                 'artists': ['Unknown Artist'],
+                'album_artists': ['Unknown Artist'],
                 'track_number': 1,
                 'disc_number': 1,
                 'year': None,
