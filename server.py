@@ -353,7 +353,7 @@ def show_artist(uuid):
 
 @app.route("/api/search/<query>", methods=["GET"])
 def search(query):
-    results = library.searcher.search(query)
+    results = library.search(query)
     return jsonify(
         {
             "songs": [

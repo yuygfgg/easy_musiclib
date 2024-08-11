@@ -60,3 +60,4 @@ class FlacExtractor(TagExtractor):
                 "date": None,
                 "year": None,
             }
+
