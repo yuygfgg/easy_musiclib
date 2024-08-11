@@ -45,6 +45,8 @@ class MusicLibraryMergeArtist:
                         )
 
         for event in self.events.values():
+            if event.name == "Unknown Event":
+                continue
             for album in event.albums:
                 if album.year is None:
                     print(
