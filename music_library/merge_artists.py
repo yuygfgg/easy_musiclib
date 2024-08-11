@@ -1,6 +1,8 @@
 import csv
 import os
 
+from music_library.utils import is_year
+
 
 class MusicLibraryMergeArtist:
     def auto_merge(self):
@@ -52,7 +54,7 @@ class MusicLibraryMergeArtist:
                     for song in album.songs:
                         song.year = event.year
             for album in event.albums:
-                if album.date == album.year:
+                if is_year(album.date):
                     print(
                         f"Setting date for album {album.name} and its songs to {event.date}"
                     )
