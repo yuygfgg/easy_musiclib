@@ -324,6 +324,7 @@
             cursor: pointer;
             border-radius: 5px;
         }
+
         #popup-lyrics {
             max-height: 80vh;
             overflow-y: auto;
@@ -426,11 +427,12 @@
             .content {
                 margin-left: 0;
             }
+
             .player-bar {
                 flex-direction: column;
                 align-items: flex-start;
             }
-    
+
             .progress-container {
                 order: -1;
                 width: 100%;
@@ -452,8 +454,8 @@
         <a href="#" onclick="navigateToSettings()">Settings</a>
     </div>
     <div class="content shifted" id="content">
-        <iframe id="content-frame" src=""></iframe>
-        <iframe id="hidden-frame" style="display:none;"></iframe>
+        <iframe id="content-frame" src="" title="visiable iframe"></iframe>
+        <iframe id="hidden-frame" style="display:none;" title="hidden playlist iframe"></iframe>
     </div>
 
     <div class="player-bar" id="player-bar">
@@ -517,12 +519,12 @@
         if (!apiBaseUrl.endsWith('/')) {
             apiBaseUrl += '/';
         }
-        
+
         let apiPath = "api";
         if (apiPath.startsWith('/')) {
             apiPath = apiPath.substring(1);
         }
-        
+
         apiBaseUrl += apiPath;
 
         function navigateTo(url) {
@@ -831,7 +833,7 @@
             const currentTime = audioPlayer.currentTime * 1000; // 转换为毫秒
             lrc.play(currentTime);
             lrc.pause();
-        
+
         }
         function closeSongPopup() {
             document.getElementById("song-popup").style.display = "none";

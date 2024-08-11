@@ -42,6 +42,7 @@ class FlacExtractor(TagExtractor):
                 "title": "Unknown Title",
                 "album": "Unknown Album",
                 "artists": ["Unknown Artist"],
+                "album_artists": ["Unknown Artist"],
                 "track_number": 1,
                 "disc_number": 1,
                 "event": "Unknown Event",
