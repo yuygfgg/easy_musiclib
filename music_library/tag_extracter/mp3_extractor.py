@@ -21,8 +21,8 @@ class Mp3Extractor(TagExtractor):
 
             track_number = int(audio.get("tracknumber", ["1"])[0].split("/")[0])
             disc_number = int(audio.get("discnumber", ["1"])[0].split("/")[0])
-            year = audio.get("date", [None])[0]
-            year = utils.extract_year(year)
+            date = audio.get("date", [None])[0]
+            year = utils.extract_year(date)
 
             return {
                 "title": title,
@@ -32,6 +32,7 @@ class Mp3Extractor(TagExtractor):
                 "track_number": track_number,
                 "disc_number": disc_number,
                 "year": year,
+                "date": date,
                 "event": event,
             }
 
@@ -45,5 +46,6 @@ class Mp3Extractor(TagExtractor):
                 "track_number": 1,
                 "disc_number": 1,
                 "year": None,
+                "date": None,
                 "event": "Unknown Event",
             }

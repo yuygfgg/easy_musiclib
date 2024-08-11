@@ -122,8 +122,9 @@ def load_library():
                     album.is_liked = album_data['is_liked']
                     album.liked_time = album_data.get('liked_time')
                     album.album_art_path = album_data['album_art_path']
-                    album.year = album_data['year']
-                    album.event = album_data['event']  # 修改这里
+                    album.year = album_data.get('year')
+                    album.date = album_data.get('date')
+                    album.event = album_data['event']
                     album.album_artists = {library.artists[artist_uuid] for artist_uuid in album_data['album_artists']}
                     album.songs = []
                     library.albums[uuid] = album
@@ -149,7 +150,7 @@ def load_library():
                         event.uuid = event_data['uuid']
                     song = Song(
                         song_data['name'], album, artists, song_data['file_path'],
-                        song_data['track_number'], song_data['disc_number'], song_data['year'], song_data.get('song_art_path') or " ",
+                        song_data['track_number'], song_data['disc_number'], song_data['year'], song_data['date'], song_data.get('song_art_path') or " ",
                         event
                     )
                     song.uuid = song_data['uuid']
@@ -174,7 +175,8 @@ def load_library():
                 for uuid, event_data in data['events'].items():
                     parse_datetime(event_data, ['liked_time'])
                     event = Event(event_data['name'])
-                    event.year = event_data['year']
+                    event.year = event_data.get('year')
+                    event.date = event_data.get('date')
                     event.uuid = event_data['uuid']
                     event.is_liked = event_data['is_liked']
                     event.liked_time = event_data.get('liked_time')

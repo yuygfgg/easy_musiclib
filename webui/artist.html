@@ -202,11 +202,18 @@
         
             // 专辑排序逻辑
             const sortedAlbums = albumsWithArt.sort((a, b) => {
-                if (a.year !== b.year) {
-                    return b.year - a.year;
-                } else {
-                    return 0;
-                }
+                const parseDate = (dateStr) => {
+                    if (/^\d{4}$/.test(dateStr)) {
+                        return new Date(dateStr, 0, 1);
+                    }
+                    const parsedDate = new Date(dateStr.replace(/\./g, '-'));
+                    return isNaN(parsedDate) ? new Date(0) : parsedDate;
+                };
+            
+                const dateA = parseDate(a.date);
+                const dateB = parseDate(b.date);
+            
+                return dateB - dateA;
             });
         
             // 渲染专辑
@@ -237,12 +244,12 @@
                 albumName.className = "card-title";
                 albumName.textContent = album.name;
         
-                const albumYear = document.createElement("p");
-                albumYear.className = "card-text";
-                albumYear.textContent = album.year;
+                const albumDate = document.createElement("p");
+                albumDate.className = "card-text";
+                albumDate.textContent = album.date;
         
                 cardBody.appendChild(albumName);
-                cardBody.appendChild(albumYear);
+                cardBody.appendChild(albumDate);
                 card.appendChild(albumArt);
                 card.appendChild(cardBody);
                 albumItem.appendChild(card);

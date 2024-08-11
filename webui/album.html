@@ -90,7 +90,7 @@
             </div>
             <div class="col-md-8">
                 <h1 id="album-name">Album Name</h1>
-                <p id="album-year">Year:</p>
+                <p id="album-date">Date:</p>
                 <a id="album-event" class="link">Event:</a>
                 <div id="album-artists" class="mb-3"></div>
                 <div id="album-like" class="liked"></div>
@@ -157,8 +157,8 @@
 
             document.getElementById("album-name").textContent = album.name;
             document.getElementById(
-                "album-year"
-            ).textContent = `年代: ${album.year}`;
+                "album-date"
+            ).textContent = `${album.date}`;
             const albumEvent = document.getElementById("album-event");
             albumEvent.textContent = `Event: ${album.event.name}`;
             albumEvent.onclick = (event) => {
