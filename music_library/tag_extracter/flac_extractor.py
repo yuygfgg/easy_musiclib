@@ -20,8 +20,18 @@ class FlacExtractor(TagExtractor):
             if isinstance(album_artists, str):
                 album_artists = [album_artists]
 
-            track_number = int(audio.get("tracknumber", ["1"])[0].split("/")[0])
-            disc_number = int(audio.get("discnumber", ["1"])[0].split("/")[0])
+            try:
+                track_number = int(audio.get('tracknumber', ['1'])[0].split('/')[0])
+            except (ValueError, IndexError) as e:
+                print(f"Error processing track number: {e}")
+                track_number = 1
+
+            try:
+                disc_number = int(audio.get('discnumber', ['1'])[0].split('/')[0])
+            except (ValueError, IndexError) as e:
+                print(f"Error processing disc number: {e}")
+                disc_number = 1
+            
             year = audio.get("date", [None])[0] or audio.get("year", [None])[0]
             year = utils.extract_year(year)
             date = audio.get("date", year)[0]

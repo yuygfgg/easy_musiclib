@@ -51,6 +51,14 @@ class MusicLibraryMergeArtist:
                     album.year = event.year
                     for song in album.songs:
                         song.year = event.year
+            for album in event.albums:
+                if album.date is None:
+                    print(
+                        f"Setting date for album {album.name} and its songs to {event.date}"
+                    )
+                    album.date = event.date
+                    for song in album.songs:
+                        song.date = event.date
 
         for album in self.albums.values():
             if album.album_art_path:
