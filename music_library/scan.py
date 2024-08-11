@@ -170,7 +170,7 @@ class MusicLibraryScan:
         if not album.album_art_path:
             album.album_art_path = song.song_art_path
             if not album.album_art_path:
-                album.album_art_path = self.extract_embedded_art(song.file_path)
+                album.album_art_path = utils.extract_embedded_art(song.file_path)
                 if album.album_art_path:
                     for s in album.songs:
                         if not s.song_art_path:
