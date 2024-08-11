@@ -6,11 +6,11 @@ import threading
 import orjson
 import json
 
-from musiclib.library import MusicLibrary
-from musiclib.models.album import Album
-from musiclib.models.artist import Artist
-from musiclib.models.event import Event
-from musiclib.models.song import Song
+from music_library.library import MusicLibrary
+from music_library.models.album import Album
+from music_library.models.artist import Artist
+from music_library.models.event import Event
+from music_library.models.song import Song
 
 
 data_file = 'library_data.json'
