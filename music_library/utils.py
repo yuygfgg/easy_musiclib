@@ -143,3 +143,49 @@ def split_and_clean(text, delimiters):
             )
         temp_artists = new_temp_artists
     return temp_artists
+
+
+def parse_artists(artists):
+    delimiters = (
+        "/",
+        "／",
+        "&",
+        "＆",
+        " x ",
+        ";",
+        "；",
+        ",",
+        "，",
+        "×",
+        "　",
+        "、",
+    )
+    ignore = ["cool&create", "Factory Noise&AG", "Sing, R. Sing!"]
+    ignore_normalized = [normalize_name(item) for item in ignore]
+    parsed_artists = []
+
+    for artist in artists:
+        parts = []
+
+        while artist:
+            artist_normalized = normalize_name(artist)
+            for ignored in ignore_normalized:
+                ignored_index = artist_normalized.find(ignored)
+                if ignored_index != -1:
+                    pre_ignored = artist[:ignored_index].strip()
+                    ignored_part = artist[ignored_index : ignored_index + len(ignored)]
+                    post_ignored = artist[ignored_index + len(ignored) :].strip()
+
+                    if pre_ignored:
+                        parts.extend(split_and_clean(pre_ignored, delimiters))
+
+                    parts.append(ignored_part)
+                    artist = post_ignored
+                    break
+            else:
+                parts.extend(split_and_clean(artist, delimiters))
+                break
+
+        parsed_artists.extend(parts)
+
+    return parsed_artists
