@@ -189,3 +189,6 @@ def parse_artists(artists):
         parsed_artists.extend(parts)
 
     return parsed_artists
+
+def is_year(n):
+    return bool(re.match(r'^-?\d{4}$', str(n)))

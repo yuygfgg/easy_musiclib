@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
 
+import music_library.utils
+
 
 class Album:
     def __init__(self, name):
@@ -33,6 +35,11 @@ class Album:
         if not self.date and self.songs:
             for song in self.songs:
                 if song.date:
+                    self.date = song.date
+                    break
+        if music_library.utils.is_year (self.date) and self.songs:
+            for song in self.songs:
+                if song.date and not music_library.utils.is_year(song.date):
                     self.date = song.date
                     break
 

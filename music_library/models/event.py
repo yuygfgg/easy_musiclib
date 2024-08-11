@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
 
+import music_library
+
 
 class Event:
     def __init__(self, name):
@@ -30,3 +32,8 @@ class Event:
             for album in self.albums:
                 if album.date is not None:
                     self.date = album.date
+        if music_library.utils.is_year (self.date) and self.albums:
+            for album in self.albums:
+                if album.date and not music_library.utils.is_year(album.date):
+                    self.date = album.date
+                    break

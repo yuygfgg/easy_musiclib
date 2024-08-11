@@ -52,7 +52,7 @@ class MusicLibraryMergeArtist:
                     for song in album.songs:
                         song.year = event.year
             for album in event.albums:
-                if album.date is None:
+                if album.date == album.year:
                     print(
                         f"Setting date for album {album.name} and its songs to {event.date}"
                     )
