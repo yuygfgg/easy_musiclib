@@ -30,7 +30,7 @@ class NeteaseLyricsSource(LyricsSource):
         for index, song in enumerate(songs):
             print(f"Trying song {index + 1}/{len(songs)} with id {song['id']}")
             try:
-                lyrics_content, trans_lyrics_content = self, download_lyrics(song["id"])
+                lyrics_content, trans_lyrics_content = self.download_lyrics(song["id"])
                 if lyrics_content:
                     lines = lyrics_content.count("\n") + 1
                     if lines > 5:
