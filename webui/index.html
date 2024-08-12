@@ -515,6 +515,7 @@
         let isRepeating = false;
         let currentSongUUID = null;
         let lrc = null;
+        let lrcLoaded = false;
 
         if (!apiBaseUrl.endsWith('/')) {
             apiBaseUrl += '/';
@@ -717,6 +718,12 @@
             }
             document.getElementById("song-popup").style.display = "flex";
             isManuallyOpen = true;
+            if(lrcLoaded){
+                lrc.play();
+                if(audioPlayer.paused){
+                    lrc.pause();
+                }
+            }
         }
         function openLyricsSelectionPopup() {
             document.getElementById("lyrics-selection-popup").style.display =
@@ -825,6 +832,7 @@
         }
 
         function selectLyrics(lyrics) {
+            lrcLoaded = true;
             parseLrc(lyrics);
             startLrcSync();
             if (currentSongUUID) {
@@ -932,6 +940,8 @@
 
         async function playSong(song) {
             try {
+
+                lrcLoaded = false;
                 console.log("Playing song:", song);
 
                 // 暂停并重置当前音频
