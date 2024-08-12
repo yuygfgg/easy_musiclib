@@ -1,11 +1,10 @@
-import importlib
-import os
+
 from functools import lru_cache
 
-from music_library import utils
+from . import utils
+from .extractor import MusicLibraryTagExtractor
 
 
-from .tag_extracter import TagExtractor
 from .display import MusicLibraryDisplay
 from .search import MusicLibrarySearch
 from .graph import MusicLibraryGraph
@@ -14,7 +13,7 @@ from .scan import MusicLibraryScan
 
 
 class MusicLibrary(
-    MusicLibrarySearch, MusicLibraryGraph, MusicLibraryMergeArtist, MusicLibraryScan
+    MusicLibrarySearch, MusicLibraryGraph, MusicLibraryMergeArtist, MusicLibraryScan, MusicLibraryTagExtractor
 ):
     def __init__(self):
         self.events = {}
@@ -32,33 +31,6 @@ class MusicLibrary(
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-
-    def load_extractors(self):
-        extractors = {}
-        for file in os.listdir("music_library/tag_extracter"):
-            if file.endswith("_extractor.py"):
-                module_name = file[:-3]
-                module = importlib.import_module(
-                    f"music_library.tag_extracter.{module_name}"
-                )
-                for attr in dir(module):
-                    cls = getattr(module, attr)
-                    if (
-                        isinstance(cls, type)
-                        and issubclass(cls, TagExtractor)
-                        and cls is not TagExtractor
-                    ):
-                        # Extract the extension from the module name
-                        extension = module_name.split("_")[0]
-                        extractors[extension] = cls()
-        return extractors
-
-    def extract_tags(self, file_path):
-        extension = os.path.splitext(file_path)[1][1:].lower()
-        extractor = self.extractors.get(extension)
-        if extractor:
-            return extractor.extract(file_path)
-        return None
 
     def add_song(self, song):
         self.songs[song.uuid] = song
@@ -86,13 +58,6 @@ class MusicLibrary(
         for artist in self.artists.values():
             if utils.normalize_name(artist.name) == normalized_name:
                 return artist
-        return None
-
-    def find_album_by_name(self, name):
-        name = name.strip()
-        for album in self.albums.values():
-            if album.name == name:
-                return album
         return None
 
     def find_song_by_name(self, name):
