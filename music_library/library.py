@@ -25,7 +25,6 @@ class MusicLibrary(
         self.extractors = self.load_extractors()
 
     def __getstate__(self):
-        # 获取对象的状态，并移除不可序列化的部分
         state = self.__dict__.copy()
         return state
 
