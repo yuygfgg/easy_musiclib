@@ -656,6 +656,9 @@
                 );
                 const progressPercent =
                     (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                document.getElementById(
+                    "progress"
+                ).style.width = `${progressPercent}%`;
                 lrc.play(currentTime);
             };
             audioPlayer.onpause = () => {
