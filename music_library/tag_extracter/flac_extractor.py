@@ -34,7 +34,7 @@ class FlacExtractor(TagExtractor):
             
             year = audio.get("date", [None])[0] or audio.get("year", [None])[0]
             year = utils.extract_year(year)
-            date = audio.get("date", year)[0]
+            date = audio.get("date", [year])[0]
             return {
                 "title": title,
                 "album": album,
