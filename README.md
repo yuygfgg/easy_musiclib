@@ -1,11 +1,12 @@
 ## EASY MUSIC LIBRARY
 
-A music library server, including server, cli client, and webui. Supports muitiple artists per track and album.
+A self-hosted music library, including server and webui. Supports muitiple artists per track and album.
+
+I have lost interest, so no more updates in foreseeable future.
+
+The documents are out-dated, read the code instead.
 
 ### Screen Shots
-
-
-
 
 https://github.com/yuygfgg/easy_musiclib/assets/140488233/9d9ad2b4-c3d5-4b4a-9faa-0ac6fe2a8cd8
 
@@ -17,13 +18,6 @@ https://github.com/yuygfgg/easy_musiclib/assets/140488233/9d9ad2b4-c3d5-4b4a-9fa
 <img width="1268" alt="截屏2024-08-09 22 04 57" src="https://github.com/user-attachments/assets/2289b93e-414f-4afa-a0e3-ccfb0d3ab2fe">
 <img width="1272" alt="截屏2024-08-09 22 05 27" src="https://github.com/user-attachments/assets/2924f478-ffc4-46da-8994-eb09ab19a3ce">
 
-
-
-### Schedual
-
-- mobile app : ~ 2025
-
-The project will continue unless I find another music library server that handles muitiple artist and muiti-disc albums correctly.
 
 ### Usage
 
@@ -47,8 +41,3 @@ The programme splits artists with delimiters, so single artist with these delimi
 
 #### API
 1. APIs are at http://server_address:5010/api/
-
-
-### Contribution
-
-Any kind of contribution is welcomed, especiall for GUI apps, which I know nothing about.
