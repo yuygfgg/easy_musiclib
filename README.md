@@ -2,7 +2,7 @@
 
 A self-hosted music library, including server and webui. Supports muitiple artists per track and album.
 
-The documents are out-dated, date is nw supported in advance to year.
+The documents are out-dated, date is now supported in advance to year.
 
 ### Screen Shots
 
