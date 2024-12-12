@@ -444,3 +444,168 @@ Base URL: `http://localhost:5010/api`
   }
   ```
 - **Status Codes**: 200 OK, 404 Not Found
+
+## Liked Items
+
+### Show Liked Events
+- **Endpoint**: `/show_liked_events`
+- **Method**: GET
+- **Example Request**: 
+  ```
+  GET /api/show_liked_events
+  ```
+- **Example Response**:
+  ```json
+  [
+    {
+      "name": "Album Release",
+      "uuid": "880e8400-e29b-41d4-a716-446655440000",
+      "year": 2014,
+      "date": "2014-10-27",
+      "albums": [
+        {
+          "name": "1989",
+          "uuid": "660e8400-e29b-41d4-a716-446655440000"
+        }
+      ],
+      "is_liked": true,
+      "liked_time": "2024-01-01T12:00:00"
+    }
+  ]
+  ```
+- **Status Codes**: 200 OK
+
+### Show Liked Songs
+- **Endpoint**: `/show_liked_songs`
+- **Method**: GET
+- **Example Request**: 
+  ```
+  GET /api/show_liked_songs
+  ```
+- **Example Response**:
+  ```json
+  [
+    {
+      "name": "Shake It Off",
+      "uuid": "770e8400-e29b-41d4-a716-446655440000",
+      "artists": [{"name": "Taylor Swift", "uuid": "550e8400-e29b-41d4-a716-446655440000"}],
+      "album": {"name": "1989", "uuid": "660e8400-e29b-41d4-a716-446655440000"},
+      "song_art_path": "/path/to/song.jpg",
+      "is_liked": true,
+      "liked_time": "2024-01-01T12:00:00",
+      "file_path": "/path/to/song.mp3"
+    }
+  ]
+  ```
+- **Status Codes**: 200 OK
+
+### Show Liked Artists
+- **Endpoint**: `/show_liked_artists`
+- **Method**: GET
+- **Example Request**: 
+  ```
+  GET /api/show_liked_artists
+  ```
+- **Example Response**:
+  ```json
+  [
+    {
+      "name": "Taylor Swift",
+      "uuid": "550e8400-e29b-41d4-a716-446655440000",
+      "artist_art_path": "/path/to/artist.jpg",
+      "is_liked": true,
+      "liked_time": "2024-01-01T12:00:00"
+    }
+  ]
+  ```
+- **Status Codes**: 200 OK
+
+### Show Liked Albums
+- **Endpoint**: `/show_liked_albums`
+- **Method**: GET
+- **Example Request**: 
+  ```
+  GET /api/show_liked_albums
+  ```
+- **Example Response**:
+  ```json
+  [
+    {
+      "name": "1989",
+      "uuid": "660e8400-e29b-41d4-a716-446655440000",
+      "year": 2014,
+      "date": "2014-10-27",
+      "album_art_path": "/path/to/album.jpg",
+      "is_liked": true,
+      "liked_time": "2024-01-01T12:00:00"
+    }
+  ]
+  ```
+- **Status Codes**: 200 OK
+
+## Artist Merging
+
+### Merge Artists by UUID
+- **Endpoint**: `/merge_artist_by_uuid`
+- **Method**: GET
+- **Parameters**:
+  - `uuid1` (string): UUID of first artist (target)
+  - `uuid2` (string): UUID of second artist (to be merged)
+- **Example Request**: 
+  ```
+  GET /api/merge_artist_by_uuid?uuid1=550e8400-e29b-41d4-a716-446655440000&uuid2=550e8400-e29b-41d4-a716-446655440001
+  ```
+- **Example Response**:
+  ```json
+  {
+    "message": "Artist 550e8400-e29b-41d4-a716-446655440001 merged into 550e8400-e29b-41d4-a716-446655440000"
+  }
+  ```
+- **Status Codes**: 200 OK, 400 Bad Request
+
+### Merge Artists by Name
+- **Endpoint**: `/merge_artist_by_name`
+- **Method**: GET
+- **Parameters**:
+  - `name1` (string): Name of first artist (target)
+  - `name2` (string): Name of second artist (to be merged)
+- **Example Request**: 
+  ```
+  GET /api/merge_artist_by_name?name1=Taylor%20Swift&name2=T.%20Swift
+  ```
+- **Example Response**:
+  ```json
+  {
+    "message": "Artist T. Swift merged into Taylor Swift"
+  }
+  ```
+- **Status Codes**: 200 OK, 400 Bad Request
+
+### Auto Merge Artists
+- **Endpoint**: `/auto_merge`
+- **Method**: GET
+- **Example Request**: 
+  ```
+  GET /api/auto_merge
+  ```
+- **Example Response**:
+  ```json
+  {
+    "message": "Auto merge completed"
+  }
+  ```
+- **Status Codes**: 200 OK
+
+Additionally, there are two static file serving endpoints:
+
+## Static Files
+
+### Serve Index
+- **Endpoint**: `/`
+- **Method**: GET
+- **Response**: Returns the index.html file from the webui directory
+
+### Serve Static Files
+- **Endpoint**: `/<path:path>`
+- **Method**: GET
+- **Response**: Returns the requested static file from the webui directory
