@@ -2,8 +2,6 @@
 
 A self-hosted music library, including server and webui. Supports muitiple artists per track and album.
 
-The documents are out-dated, date is now supported in addition to year.
-
 ### Screen Shots
 
 https://github.com/yuygfgg/easy_musiclib/assets/140488233/9d9ad2b4-c3d5-4b4a-9faa-0ac6fe2a8cd8
