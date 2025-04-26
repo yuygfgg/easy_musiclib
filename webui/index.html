@@ -473,6 +473,7 @@
             <button id="next-btn">&#9654;&#9654;</button>
             <button id="repeat-btn">&#128257;</button>
             <button id="like-btn">&#9825;</button>
+            <button id="download-btn">&#8595;</button>
         </div>
         <div class="progress-container">
             <span id="playing-time">00:00</span>
@@ -516,6 +517,7 @@
         let currentSongUUID = null;
         let lrc = null;
         let lrcLoaded = false;
+        let currentSongFilePath = null;
 
         if (!apiBaseUrl.endsWith('/')) {
             apiBaseUrl += '/';
@@ -985,6 +987,8 @@
                 document.getElementById("popup-album").innerHTML = document.getElementById("playing-album").innerHTML;
                 document.getElementById("popup-lyrics").textContent = "loading...";
 
+                currentSongFilePath = song.filePath;
+
                 // 更新媒体会话元数据
                 if ("mediaSession" in navigator) {
                     updateMediaSessionMetadata(song);
@@ -1021,6 +1025,30 @@
             } catch (error) {
                 console.error("Error:", error);
             }
+        }
+
+        function downloadCurrentSong() {
+            if (!currentSongFilePath) {
+                console.error("No song is currently loaded");
+                return;
+            }
+            
+            const pathParts = currentSongFilePath.split('/');
+            const originalFilename = pathParts[pathParts.length - 1];
+            
+            const downloadUrl = `${apiBaseUrl}/getStream?file_path=${encodeURIComponent(currentSongFilePath)}`;
+            
+            const downloadLink = document.createElement('a');
+            downloadLink.href = downloadUrl;
+            downloadLink.download = originalFilename;
+            downloadLink.style.display = 'none';
+            
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            
+            setTimeout(() => {
+                document.body.removeChild(downloadLink);
+            }, 100);
         }
 
         function playPreviousSong() {
@@ -1168,6 +1196,9 @@
         document
             .getElementById("like-btn")
             .addEventListener("click", toggleSongLike);
+        document
+            .getElementById("download-btn")
+            .addEventListener("click", downloadCurrentSong);
         document
             .getElementById("progress-bar")
             .addEventListener("click", setProgress);
