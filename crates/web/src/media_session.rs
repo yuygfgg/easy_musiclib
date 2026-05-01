@@ -185,8 +185,44 @@ fn set_js_property(target: &JsValue, key: &str, value: &JsValue) {
     let _ = js_sys::Reflect::set(target, &JsValue::from_str(key), value);
 }
 pub(crate) fn js_error_text(value: JsValue) -> String {
-    value
+    let name = js_string_property(&value, "name");
+    let message = js_string_property(&value, "message");
+    let text = value
         .as_string()
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| String::from("Playback failed"))
+        .or_else(|| js_to_string(&value));
+    let detail = match (name.as_deref(), message.as_deref(), text.as_deref()) {
+        (Some(name), Some(message), _) if !name.is_empty() && !message.is_empty() => {
+            format!("{name}: {message}")
+        }
+        (Some(name), _, _) if !name.is_empty() => name.to_string(),
+        (_, Some(message), _) if !message.is_empty() => message.to_string(),
+        (_, _, Some(text)) if !text.is_empty() && text != "[object Object]" => text.to_string(),
+        _ => String::new(),
+    };
+
+    if detail.is_empty() {
+        String::from("Playback failed")
+    } else {
+        format!("Playback failed: {detail}")
+    }
+}
+
+fn js_string_property(value: &JsValue, key: &str) -> Option<String> {
+    js_sys::Reflect::get(value, &JsValue::from_str(key))
+        .ok()
+        .and_then(|value| value.as_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn js_to_string(value: &JsValue) -> Option<String> {
+    let function = js_sys::Reflect::get(value, &JsValue::from_str("toString"))
+        .ok()?
+        .dyn_into::<js_sys::Function>()
+        .ok()?;
+    function
+        .call0(value)
+        .ok()
+        .and_then(|value| value.as_string())
+        .filter(|value| !value.is_empty())
 }

@@ -223,6 +223,15 @@ pub fn transcode_file_for_browser(
     ffmpeg_backend::transcode_file_for_browser(path, format)
 }
 
+pub fn transcode_file_range_for_browser(
+    path: &Path,
+    format: PlaybackTranscodeFormat,
+    start_ms: i64,
+    end_ms: Option<i64>,
+) -> Result<TranscodedAudio> {
+    ffmpeg_backend::transcode_file_range_for_browser(path, format, start_ms, end_ms)
+}
+
 #[cfg(unix)]
 pub fn transcode_file_range_for_browser_to_fd(
     path: &Path,

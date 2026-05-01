@@ -13,7 +13,7 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use easy_musiclib_media::formats::{
     PASSTHROUGH_RENDERER, is_playable_renderer, read_audio_metadata,
-    read_embedded_picture_for_path, render_cue_track_by_renderer,
+    read_embedded_picture_for_path, render_cue_track_by_renderer, transcode_file_range_for_browser,
     transcode_file_range_for_browser_to_fd,
 };
 use easy_musiclib_media::render::{PlaybackTranscodeFormat, RenderTags};
@@ -61,6 +61,7 @@ pub struct ArtworkQuery {
 #[derive(Debug, Deserialize)]
 pub struct StreamQuery {
     start_ms: Option<i64>,
+    buffered: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -700,8 +701,16 @@ pub async fn stream_track(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(q): Query<StreamQuery>,
+    headers: HeaderMap,
 ) -> ApiResult<Response> {
-    stream_track_response(state, id, q.start_ms.unwrap_or(0)).await
+    stream_track_response(
+        state,
+        id,
+        q.start_ms.unwrap_or(0),
+        q.buffered.unwrap_or(false),
+        headers,
+    )
+    .await
 }
 
 pub async fn download_track(
@@ -716,6 +725,8 @@ async fn stream_track_response(
     state: AppState,
     id: String,
     requested_start_ms: i64,
+    buffered: bool,
+    headers: HeaderMap,
 ) -> ApiResult<Response> {
     let id = db::resolve_id(&state.pool, "tracks", &id).await?;
     let source = db::track_render_source(&state.pool, id).await?;
@@ -726,7 +737,14 @@ async fn stream_track_response(
     let source = db::track_render_source(&state.pool, id).await?;
     let playback_format =
         media_playback_format(db::app_settings(&state.pool).await?.browser_playback_format);
-    stream_browser_audio(source, playback_format, requested_start_ms).await
+    stream_browser_audio(
+        source,
+        playback_format,
+        requested_start_ms,
+        buffered,
+        headers,
+    )
+    .await
 }
 
 async fn render_track_response(
@@ -781,20 +799,67 @@ async fn stream_browser_audio(
     source: db::RenderSourceRow,
     playback_format: PlaybackTranscodeFormat,
     requested_start_ms: i64,
+    buffered: bool,
+    headers: HeaderMap,
 ) -> ApiResult<Response> {
+    let (absolute_start_ms, end_ms) = browser_stream_time_range(&source, requested_start_ms);
+    if buffered || headers.get(RANGE).is_some() {
+        return buffered_browser_audio(source, playback_format, absolute_start_ms, end_ms, headers)
+            .await;
+    }
+
+    streaming_browser_audio(source, playback_format, absolute_start_ms, end_ms).await
+}
+
+fn browser_stream_time_range(
+    source: &db::RenderSourceRow,
+    requested_start_ms: i64,
+) -> (i64, Option<i64>) {
     let track_start_ms = source.start_ms.unwrap_or(0).max(0);
     let relative_start_ms = requested_start_ms.max(0);
     let mut absolute_start_ms = track_start_ms.saturating_add(relative_start_ms);
     if let Some(end_ms) = source.end_ms {
         absolute_start_ms = absolute_start_ms.min(end_ms.saturating_sub(1).max(track_start_ms));
     }
+    (absolute_start_ms, source.end_ms)
+}
 
+async fn buffered_browser_audio(
+    source: db::RenderSourceRow,
+    playback_format: PlaybackTranscodeFormat,
+    absolute_start_ms: i64,
+    end_ms: Option<i64>,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
+    let input_path = PathBuf::from(source.path.clone());
+    let title = source.title.clone();
+    let rendered = tokio::task::spawn_blocking(move || {
+        transcode_file_range_for_browser(&input_path, playback_format, absolute_start_ms, end_ms)
+    })
+    .await
+    .map_err(|e| AppError::internal(e.to_string()))??;
+
+    Ok(audio_bytes_response(
+        rendered.bytes,
+        rendered.mime,
+        rendered.extension,
+        &title,
+        false,
+        &headers,
+    ))
+}
+
+async fn streaming_browser_audio(
+    source: db::RenderSourceRow,
+    playback_format: PlaybackTranscodeFormat,
+    absolute_start_ms: i64,
+    end_ms: Option<i64>,
+) -> ApiResult<Response> {
     let (reader, writer) = StdUnixStream::pair()?;
     reader.set_nonblocking(true)?;
     let reader = tokio::net::UnixStream::from_std(reader)?;
     let output_fd = writer.into_raw_fd();
     let input_path = PathBuf::from(source.path.clone());
-    let end_ms = source.end_ms;
     let title = source.title.clone();
     tokio::task::spawn_blocking(move || {
         if let Err(err) = transcode_file_range_for_browser_to_fd(

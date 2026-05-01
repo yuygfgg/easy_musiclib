@@ -13,6 +13,7 @@ use crate::util::{format_time, progress_value};
 use easy_musiclib_shared::{LikePatch, LyricsCandidate, TrackDetail, TrackSummary};
 use leptos::prelude::*;
 use std::rc::Rc;
+use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 
 #[component]
@@ -116,10 +117,7 @@ pub(crate) fn Player() -> impl IntoView {
         if let Some(audio) = audio_ref.get() {
             let _ = audio.pause();
             let start_ms = (position * 1000.0).round().max(0.0) as i64;
-            audio.set_src(&format!(
-                "/api/tracks/{}/stream?start_ms={start_ms}",
-                track.id
-            ));
+            audio.set_src(&stream_url(track.id, start_ms));
             audio.load();
             if autoplay {
                 match audio.play() {
@@ -375,6 +373,13 @@ pub(crate) fn Player() -> impl IntoView {
             }
             on:loadedmetadata=move |_| update_audio_progress()
             on:timeupdate=move |_| update_audio_progress()
+            on:error=move |_| {
+                if let Some(audio) = audio_ref.get() {
+                    ctx.set_status.set(audio_error_text(&audio));
+                } else {
+                    ctx.set_status.set(String::from("Audio error"));
+                }
+            }
             on:ended=move |_| {
                 if repeat.get_untracked() {
                     start_stream_at(0.0, true);
@@ -477,6 +482,130 @@ pub(crate) fn Player() -> impl IntoView {
                 }}
             </div>
         </section>
+    }
+}
+
+fn stream_url(track_id: i64, start_ms: i64) -> String {
+    let mut url = format!("/api/tracks/{track_id}/stream?start_ms={start_ms}");
+    if needs_buffered_audio_response() {
+        url.push_str("&buffered=true");
+    }
+    url
+}
+
+fn needs_buffered_audio_response() -> bool {
+    let ua = navigator_string_property("userAgent");
+    let vendor = navigator_string_property("vendor");
+    if ua.is_empty() {
+        return false;
+    }
+
+    let apple_webkit = ua.contains("AppleWebKit");
+    let apple_vendor = vendor.contains("Apple");
+    let ios = ua.contains("iPhone")
+        || ua.contains("iPad")
+        || ua.contains("iPod")
+        || (ua.contains("Macintosh") && navigator_number_property("maxTouchPoints") > 1.0);
+    let safari = apple_vendor
+        && ua.contains("Safari")
+        && !ua.contains("Chrome")
+        && !ua.contains("Chromium")
+        && !ua.contains("CriOS")
+        && !ua.contains("FxiOS")
+        && !ua.contains("Edg")
+        && !ua.contains("OPR");
+
+    safari || (ios && apple_vendor && apple_webkit)
+}
+
+fn navigator_string_property(name: &str) -> String {
+    navigator_property(name)
+        .and_then(|value| value.as_string())
+        .unwrap_or_default()
+}
+
+fn navigator_number_property(name: &str) -> f64 {
+    navigator_property(name)
+        .and_then(|value| value.as_f64())
+        .unwrap_or(0.0)
+}
+
+fn navigator_property(name: &str) -> Option<JsValue> {
+    let window = web_sys::window()?;
+    let navigator = js_sys::Reflect::get(window.as_ref(), &JsValue::from_str("navigator")).ok()?;
+    js_sys::Reflect::get(&navigator, &JsValue::from_str(name)).ok()
+}
+
+fn audio_error_text(audio: &web_sys::HtmlAudioElement) -> String {
+    let error = js_sys::Reflect::get(audio.as_ref(), &JsValue::from_str("error"))
+        .ok()
+        .filter(|value| !value.is_null() && !value.is_undefined());
+    let code = error
+        .as_ref()
+        .and_then(|value| js_number_property(value, "code"))
+        .map(|value| value as u16);
+    let message = error
+        .as_ref()
+        .and_then(|value| js_string_property(value, "message"));
+
+    let mut text = match code {
+        Some(1) => String::from("Audio error: MEDIA_ERR_ABORTED (1)"),
+        Some(2) => String::from("Audio error: MEDIA_ERR_NETWORK (2)"),
+        Some(3) => String::from("Audio error: MEDIA_ERR_DECODE (3)"),
+        Some(4) => String::from("Audio error: MEDIA_ERR_SRC_NOT_SUPPORTED (4)"),
+        Some(code) => format!("Audio error: MediaError code {code}"),
+        None => String::from("Audio error"),
+    };
+    if let Some(message) = message.filter(|value| !value.is_empty()) {
+        text.push_str(": ");
+        text.push_str(&message);
+    }
+
+    text.push_str(&format!(
+        " [ready={}, network={}",
+        ready_state_text(audio.ready_state()),
+        network_state_text(audio.network_state())
+    ));
+    let src = audio.current_src();
+    if !src.is_empty() {
+        text.push_str(", src=");
+        text.push_str(&src);
+    }
+    text.push(']');
+    text
+}
+
+fn js_string_property(value: &JsValue, key: &str) -> Option<String> {
+    js_sys::Reflect::get(value, &JsValue::from_str(key))
+        .ok()
+        .and_then(|value| value.as_string())
+}
+
+fn js_number_property(value: &JsValue, key: &str) -> Option<f64> {
+    js_sys::Reflect::get(value, &JsValue::from_str(key))
+        .ok()
+        .and_then(|value| value.as_f64())
+        .filter(|value| value.is_finite())
+}
+
+fn ready_state_text(value: u16) -> &'static str {
+    match value {
+        0 => "HAVE_NOTHING",
+        1 => "HAVE_METADATA",
+        2 => "HAVE_CURRENT_DATA",
+        3 => "HAVE_FUTURE_DATA",
+        4 => "HAVE_ENOUGH_DATA",
+        _ => "UNKNOWN",
+    }
+}
+
+fn network_state_text(value: u16) -> &'static str {
+    match value {
+        0 => "NETWORK_EMPTY",
+        1 => "NETWORK_IDLE",
+        2 => "NETWORK_LOADING",
+        3 => "NETWORK_NO_SOURCE",
+        _ => "UNKNOWN",
     }
 }
 

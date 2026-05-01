@@ -65,6 +65,22 @@ pub fn transcode_file_for_browser(
     transcode_file_to_bytes(path, FfmpegOutput::Playback(format), None)
 }
 
+pub fn transcode_file_range_for_browser(
+    path: &Path,
+    format: PlaybackTranscodeFormat,
+    start_ms: i64,
+    end_ms: Option<i64>,
+) -> Result<TranscodedAudio> {
+    transcode_file_to_bytes(
+        path,
+        FfmpegOutput::Playback(format),
+        Some(FilterRange::Time(TimeRange {
+            start_ms: start_ms.max(0),
+            end_ms,
+        })),
+    )
+}
+
 #[cfg(unix)]
 pub fn transcode_file_range_for_browser_to_fd(
     path: &Path,

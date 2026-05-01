@@ -1,5 +1,6 @@
 pub mod artists;
 pub mod cue;
+mod encoding;
 mod ffmpeg_backend;
 mod flac;
 pub mod formats;

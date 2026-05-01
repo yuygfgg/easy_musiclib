@@ -1,4 +1,4 @@
-use crate::extract_year;
+use crate::{encoding::detect_text_encoding, extract_year};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -39,16 +39,7 @@ pub fn parse_cue_file(path: &Path) -> Result<CueSheet> {
     let text = if let Ok(s) = std::str::from_utf8(&bytes) {
         s.to_string()
     } else {
-        let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
-        detector.feed(&bytes, true);
-
-        let mut encoding = detector.guess(None, chardetng::Utf8Detection::Allow);
-
-        // Sometimes detector guesses gbk as gb2312.
-        if encoding.name().starts_with("gb") {
-            encoding = encoding_rs::GBK;
-        }
-
+        let encoding = detect_text_encoding(&bytes);
         let (decoded, _, _) = encoding.decode(&bytes);
         decoded.into_owned()
     };
