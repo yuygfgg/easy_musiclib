@@ -1,8 +1,10 @@
 use crate::artists::parse_artists;
 use crate::{clean_file_stem, extract_year};
 use anyhow::{Context, Result};
+use lofty::config::ParseOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::prelude::Accessor;
+use lofty::probe::Probe;
 use lofty::tag::{ItemKey, ItemValue, Tag};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -35,7 +37,12 @@ pub struct EmbeddedPictureInfo {
 }
 
 pub fn read_audio_tags(path: &Path, split_exceptions: &[String]) -> Result<AudioTags> {
-    let tagged = lofty::read_from_path(path)
+    let sidecar_artwork = find_sidecar_artwork(path);
+    let read_embedded_artwork = sidecar_artwork.is_none();
+    let tagged = Probe::open(path)
+        .with_context(|| format!("opening audio metadata {}", path.display()))?
+        .options(ParseOptions::new().read_cover_art(read_embedded_artwork))
+        .read()
         .with_context(|| format!("reading audio metadata {}", path.display()))?;
     let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
     let properties = tagged.properties();
@@ -71,12 +78,16 @@ pub fn read_audio_tags(path: &Path, split_exceptions: &[String]) -> Result<Audio
         .and_then(read_event)
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("Unknown Event"));
-    let embedded_picture = tag.and_then(|t| {
-        t.pictures().first().map(|picture| EmbeddedPictureInfo {
-            index: 0,
-            mime: picture.mime_type().map(|m| m.as_str().to_string()),
+    let embedded_picture = read_embedded_artwork
+        .then(|| {
+            tag.and_then(|t| {
+                t.pictures().first().map(|picture| EmbeddedPictureInfo {
+                    index: 0,
+                    mime: picture.mime_type().map(|m| m.as_str().to_string()),
+                })
+            })
         })
-    });
+        .flatten();
 
     Ok(AudioTags {
         title,
@@ -100,7 +111,7 @@ pub fn read_audio_tags(path: &Path, split_exceptions: &[String]) -> Result<Audio
         sample_rate: properties.sample_rate().map(i64::from),
         channels: properties.channels().map(i64::from),
         embedded_picture,
-        sidecar_artwork: find_sidecar_artwork(path),
+        sidecar_artwork,
         format: format!("{:?}", tagged.file_type()).to_ascii_lowercase(),
     })
 }

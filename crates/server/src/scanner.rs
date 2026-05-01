@@ -433,17 +433,6 @@ async fn artwork_for_tags(
     media_file_id: i64,
     tags: &AudioTags,
 ) -> Result<Option<i64>> {
-    if let Some(pic) = &tags.embedded_picture {
-        return db::ensure_artwork_source(
-            pool,
-            "embedded",
-            Some(media_file_id),
-            None,
-            Some(pic.index),
-            pic.mime.as_deref(),
-        )
-        .await;
-    }
     if let Some(path) = &tags.sidecar_artwork {
         return db::ensure_artwork_source(
             pool,
@@ -452,6 +441,17 @@ async fn artwork_for_tags(
             Some(&path.to_string_lossy()),
             None,
             None,
+        )
+        .await;
+    }
+    if let Some(pic) = &tags.embedded_picture {
+        return db::ensure_artwork_source(
+            pool,
+            "embedded",
+            Some(media_file_id),
+            None,
+            Some(pic.index),
+            pic.mime.as_deref(),
         )
         .await;
     }

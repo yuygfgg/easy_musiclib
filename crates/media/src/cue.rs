@@ -41,7 +41,14 @@ pub fn parse_cue_file(path: &Path) -> Result<CueSheet> {
     } else {
         let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
         detector.feed(&bytes, true);
-        let encoding = detector.guess(None, chardetng::Utf8Detection::Allow);
+
+        let mut encoding = detector.guess(None, chardetng::Utf8Detection::Allow);
+
+        // Sometimes detector guesses gbk as gb2312.
+        if encoding.name().starts_with("gb") {
+            encoding = encoding_rs::GBK;
+        }
+
         let (decoded, _, _) = encoding.decode(&bytes);
         decoded.into_owned()
     };
