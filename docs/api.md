@@ -49,11 +49,13 @@ Set `liked` to `false` to unlike.
 
 ```text
 GET /api/artwork/{artwork_id}?size=256
-GET /api/tracks/{id_or_uuid}/stream
+GET /api/tracks/{id_or_uuid}/stream?start_ms=0
 GET /api/tracks/{id_or_uuid}/download
 ```
 
-Ordinary tracks support HTTP Range. CUE tracks are rendered as independent audio responses and do not expose the whole-album source file as a frontend URL.
+`stream` returns browser-playback audio in the configured playback format. `start_ms` is optional and defaults to `0`; when present, the stream starts at that millisecond offset relative to the track. For CUE tracks, the offset is relative to the CUE track start and is clamped to the CUE track's duration. Streaming is sequential and does not use HTTP Range; clients should restart the stream with a new `start_ms` to seek.
+
+`download` returns the original/native track output. Ordinary file downloads support HTTP Range. CUE tracks are rendered as independent audio responses and do not expose the whole-album source file as a frontend URL.
 
 ## Lyrics
 

@@ -1,7 +1,8 @@
 use crate::db;
 use anyhow::{Context, Result};
+use easy_musiclib_media::formats::{PASSTHROUGH_RENDERER, format_by_extension};
 use easy_musiclib_media::normalize::normalize_name;
-use easy_musiclib_media::{path_hash, supported_extension};
+use easy_musiclib_media::path_hash;
 use serde_json::Value;
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
@@ -287,7 +288,9 @@ async fn import_audio_source(
         return Ok(());
     };
     let path_obj = Path::new(path);
-    let format = supported_extension(path_obj).unwrap_or("unknown");
+    let format = format_by_extension(path_obj)
+        .map(|format| format.id())
+        .unwrap_or("unknown");
     let (size, mtime_ns) = if stat_files {
         std::fs::metadata(path_obj)
             .map(|meta| {
@@ -315,11 +318,12 @@ async fn import_audio_source(
     sqlx::query(
         "INSERT OR IGNORE INTO track_audio_sources
          (track_id, kind, media_file_id, codec, renderer)
-         VALUES (?, 'file', ?, ?, 'passthrough')",
+         VALUES (?, 'file', ?, ?, ?)",
     )
     .bind(track_id)
     .bind(media_id)
     .bind(format)
+    .bind(PASSTHROUGH_RENDERER)
     .execute(pool)
     .await?;
     Ok(())

@@ -1,15 +1,18 @@
-use crate::api::api_patch_json;
+use crate::api::{api_get, api_patch_json};
 use crate::app::{AppContext, PlayRequest};
 use crate::lyrics::{
     LyricLine, active_lyric_index, apply_lyrics_text, load_lyrics_for_track, storage_key,
     storage_set,
 };
-use crate::media_session::{js_error_text, update_media_position_state, update_media_session};
+use crate::media_session::{
+    install_media_seek_handlers, js_error_text, update_media_position_state, update_media_session,
+};
 use crate::route::Page;
 use crate::ui::{ArtistInlineLinks, EntityLink};
 use crate::util::{format_time, progress_value};
 use easy_musiclib_shared::{LikePatch, LyricsCandidate, TrackDetail, TrackSummary};
 use leptos::prelude::*;
+use std::rc::Rc;
 use wasm_bindgen_futures::JsFuture;
 
 #[component]
@@ -20,6 +23,7 @@ pub(crate) fn Player() -> impl IntoView {
     let (repeat, set_repeat) = signal(false);
     let (current_time, set_current_time) = signal(0.0_f64);
     let (duration, set_duration) = signal(0.0_f64);
+    let (stream_start_time, set_stream_start_time) = signal(0.0_f64);
     let (seek_value, set_seek_value) = signal(0_i64);
     let (seeking, set_seeking) = signal(false);
     let (lyrics_open, set_lyrics_open) = signal(false);
@@ -72,23 +76,52 @@ pub(crate) fn Player() -> impl IntoView {
         }
     };
 
-    Effect::new(move |_| {
-        if let Some(request) = ctx.play_request.get() {
-            let track = request.track;
-            if !track.playable {
-                ctx.set_status.set(String::from("Track is not playable"));
-                return;
-            }
-            ctx.set_current_track.set(Some(track.clone()));
-            update_media_session(&track, None);
-            reset_lyrics(Some(track.clone()));
-            set_current_time.set(0.0);
-            set_duration.set(0.0);
-            set_seek_value.set(0);
-            if let Some(audio) = audio_ref.get() {
-                let _ = audio.pause();
-                audio.set_src(&format!("/api/tracks/{}/stream", track.id));
-                audio.load();
+    let track_duration = move || {
+        ctx.current_track
+            .get_untracked()
+            .and_then(|track| track.duration_ms)
+            .map(|duration| duration.max(0) as f64 / 1000.0)
+            .unwrap_or(0.0)
+    };
+
+    let clamp_position = move |position: f64| {
+        let duration = track_duration();
+        if duration > 0.0 {
+            position.clamp(0.0, (duration - 0.05).max(0.0))
+        } else {
+            position.max(0.0)
+        }
+    };
+
+    let set_display_position = move |position: f64| {
+        let duration = track_duration();
+        set_duration.set(duration);
+        set_current_time.set(if duration > 0.0 {
+            position.clamp(0.0, duration)
+        } else {
+            position.max(0.0)
+        });
+        if !seeking.get_untracked() {
+            set_seek_value.set(progress_value(position, duration));
+        }
+    };
+
+    let start_stream_at = Rc::new(move |position: f64, autoplay: bool| {
+        let Some(track) = ctx.current_track.get_untracked() else {
+            return;
+        };
+        let position = clamp_position(position);
+        set_stream_start_time.set(position);
+        set_display_position(position);
+        if let Some(audio) = audio_ref.get() {
+            let _ = audio.pause();
+            let start_ms = (position * 1000.0).round().max(0.0) as i64;
+            audio.set_src(&format!(
+                "/api/tracks/{}/stream?start_ms={start_ms}",
+                track.id
+            ));
+            audio.load();
+            if autoplay {
                 match audio.play() {
                     Ok(promise) => {
                         let set_status = ctx.set_status;
@@ -103,14 +136,37 @@ pub(crate) fn Player() -> impl IntoView {
                     Err(err) => ctx.set_status.set(js_error_text(err)),
                 }
             }
-            load_lyrics_for_track(
+        }
+    });
+
+    let media_seek_to = start_stream_at.clone();
+    let media_seek_by = start_stream_at.clone();
+    install_media_seek_handlers(
+        move |position| media_seek_to(position, true),
+        move |offset| media_seek_by(current_time.get_untracked() + offset, true),
+    );
+
+    let play_request_start_stream_at = start_stream_at.clone();
+    Effect::new(move |_| {
+        if let Some(request) = ctx.play_request.get() {
+            let track = request.track;
+            if !track.playable {
+                ctx.set_status.set(String::from("Track is not playable"));
+                return;
+            }
+            start_track_playback(
                 track,
-                false,
+                ctx,
+                play_request_start_stream_at.clone(),
+                reset_lyrics,
+                set_current_time,
+                set_duration,
+                set_stream_start_time,
+                set_seek_value,
                 set_lyrics_candidates,
                 set_lyrics_lines,
                 set_lyrics_text,
                 set_lyrics_loaded,
-                ctx.set_status,
             );
         }
     });
@@ -131,8 +187,12 @@ pub(crate) fn Player() -> impl IntoView {
 
     let update_audio_progress = move || {
         if let Some(audio) = audio_ref.get() {
-            let current = audio.current_time();
-            let duration_value = audio.duration();
+            let duration_value = track_duration();
+            let current = if duration_value > 0.0 {
+                (stream_start_time.get_untracked() + audio.current_time()).min(duration_value)
+            } else {
+                stream_start_time.get_untracked() + audio.current_time()
+            };
             set_current_time.set(current);
             set_duration.set(duration_value);
             if !seeking.get_untracked() {
@@ -255,15 +315,23 @@ pub(crate) fn Player() -> impl IntoView {
                             set_current_time.set((value as f64 / 1000.0) * duration);
                         }
                     }
-                    on:change=move |_| {
-                        if let Some(audio) = audio_ref.get() {
-                            let duration = audio.duration();
-                            if duration.is_finite() && duration > 0.0 {
-                                audio.set_current_time((seek_value.get_untracked() as f64 / 1000.0) * duration);
-                            }
+                    on:change={
+                        let start_stream_at = start_stream_at.clone();
+                        move |_| {
+                            let duration = duration.get_untracked();
+                            let target = if duration.is_finite() && duration > 0.0 {
+                                (seek_value.get_untracked() as f64 / 1000.0) * duration
+                            } else {
+                                current_time.get_untracked()
+                            };
+                            let was_playing = audio_ref
+                                .get()
+                                .map(|audio| !audio.paused())
+                                .unwrap_or(true);
+                            set_seeking.set(false);
+                            start_stream_at(target, was_playing);
+                            update_audio_progress();
                         }
-                        set_seeking.set(false);
-                        update_audio_progress();
                     }
                 />
                 <span>{move || format_time(duration.get())}</span>
@@ -309,14 +377,7 @@ pub(crate) fn Player() -> impl IntoView {
             on:timeupdate=move |_| update_audio_progress()
             on:ended=move |_| {
                 if repeat.get_untracked() {
-                    if let Some(audio) = audio_ref.get() {
-                        audio.set_current_time(0.0);
-                        if let Ok(promise) = audio.play() {
-                            wasm_bindgen_futures::spawn_local(async move {
-                                let _ = JsFuture::from(promise).await;
-                            });
-                        }
-                    }
+                    start_stream_at(0.0, true);
                 } else {
                     play_offset(1);
                 }
@@ -417,4 +478,64 @@ pub(crate) fn Player() -> impl IntoView {
             </div>
         </section>
     }
+}
+
+fn start_track_playback<F, R>(
+    track: TrackSummary,
+    ctx: AppContext,
+    start_stream_at: Rc<F>,
+    reset_lyrics: R,
+    set_current_time: WriteSignal<f64>,
+    set_duration: WriteSignal<f64>,
+    set_stream_start_time: WriteSignal<f64>,
+    set_seek_value: WriteSignal<i64>,
+    set_lyrics_candidates: WriteSignal<Vec<LyricsCandidate>>,
+    set_lyrics_lines: WriteSignal<Vec<LyricLine>>,
+    set_lyrics_text: WriteSignal<String>,
+    set_lyrics_loaded: WriteSignal<bool>,
+) where
+    F: Fn(f64, bool) + 'static,
+    R: Fn(Option<TrackSummary>) + Copy + 'static,
+{
+    let begin = move |track: TrackSummary| {
+        ctx.set_current_track.set(Some(track.clone()));
+        ctx.set_track_update.set(Some(track.clone()));
+        update_media_session(&track, None);
+        reset_lyrics(Some(track.clone()));
+        set_current_time.set(0.0);
+        set_duration.set(
+            track
+                .duration_ms
+                .map(|duration| duration.max(0) as f64 / 1000.0)
+                .unwrap_or(0.0),
+        );
+        set_stream_start_time.set(0.0);
+        set_seek_value.set(0);
+        start_stream_at(0.0, true);
+        load_lyrics_for_track(
+            track,
+            false,
+            set_lyrics_candidates,
+            set_lyrics_lines,
+            set_lyrics_text,
+            set_lyrics_loaded,
+            ctx.set_status,
+        );
+    };
+
+    if track.duration_ms.is_some() {
+        begin(track);
+        return;
+    }
+
+    wasm_bindgen_futures::spawn_local(async move {
+        let track = match api_get::<TrackDetail>(&format!("/api/tracks/{}", track.id)).await {
+            Ok(detail) => detail.summary,
+            Err(err) => {
+                ctx.set_status.set(err);
+                track
+            }
+        };
+        begin(track);
+    });
 }

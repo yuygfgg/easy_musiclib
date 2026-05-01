@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use tower_http::compression::CompressionLayer;
+use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -85,6 +86,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/relations", get(handlers::relations))
         .route("/api/artwork/{id}", get(handlers::artwork))
         .route("/api/lyrics/search", get(handlers::lyrics_search))
+        .route(
+            "/api/settings",
+            get(handlers::get_settings).patch(handlers::patch_settings),
+        )
         .route("/api/scan-jobs", post(handlers::create_scan_job))
         .route("/api/scan-jobs/{id}", get(handlers::get_scan_job))
         .route(
@@ -93,7 +98,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/database/vacuum", post(handlers::vacuum))
         .fallback_service(ServeDir::new(static_dir).append_index_html_on_directories(true))
-        .layer(CompressionLayer::new())
+        .layer(
+            CompressionLayer::new()
+                .compress_when(DefaultPredicate::new().and(NotForContentType::const_new("audio/"))),
+        )
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state)

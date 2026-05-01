@@ -1,5 +1,6 @@
 use anyhow::Result;
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
+use std::collections::HashSet;
 
 pub async fn init_db(pool: &SqlitePool) -> Result<()> {
     let statements = SCHEMA
@@ -9,7 +10,98 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
     for statement in statements {
         sqlx::query(statement).execute(pool).await?;
     }
+    migrate_db(pool).await?;
     Ok(())
+}
+
+async fn migrate_db(pool: &SqlitePool) -> Result<()> {
+    ensure_column(pool, "media_files", "sample_rate", "INTEGER").await?;
+    ensure_column(pool, "media_files", "channels", "INTEGER").await?;
+    ensure_column(pool, "media_files", "duration_ms", "INTEGER").await?;
+    ensure_column(pool, "media_files", "scan_error", "TEXT").await?;
+    ensure_column(pool, "media_files", "missing", "INTEGER NOT NULL DEFAULT 0").await?;
+
+    ensure_column(pool, "tracks", "date", "TEXT").await?;
+    ensure_column(pool, "tracks", "year", "INTEGER").await?;
+    ensure_column(pool, "tracks", "artwork_id", "INTEGER").await?;
+    ensure_column(pool, "tracks", "liked_at", "INTEGER").await?;
+
+    ensure_column(pool, "albums", "date", "TEXT").await?;
+    ensure_column(pool, "albums", "year", "INTEGER").await?;
+    ensure_column(pool, "albums", "event_id", "INTEGER").await?;
+    ensure_column(pool, "albums", "artwork_id", "INTEGER").await?;
+    ensure_column(pool, "albums", "liked_at", "INTEGER").await?;
+
+    ensure_column(pool, "artists", "artwork_id", "INTEGER").await?;
+    ensure_column(pool, "artists", "liked_at", "INTEGER").await?;
+
+    ensure_column(pool, "events", "date", "TEXT").await?;
+    ensure_column(pool, "events", "year", "INTEGER").await?;
+    ensure_column(pool, "events", "liked_at", "INTEGER").await?;
+
+    ensure_column(pool, "cue_sheets", "encoding", "TEXT").await?;
+    ensure_column(pool, "cue_sheets", "parse_error", "TEXT").await?;
+
+    ensure_column(
+        pool,
+        "track_audio_sources",
+        "kind",
+        "TEXT NOT NULL DEFAULT 'file'",
+    )
+    .await?;
+    ensure_column(pool, "track_audio_sources", "cue_sheet_id", "INTEGER").await?;
+    ensure_column(
+        pool,
+        "track_audio_sources",
+        "codec",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    .await?;
+    ensure_column(pool, "track_audio_sources", "sample_rate", "INTEGER").await?;
+    ensure_column(pool, "track_audio_sources", "start_sample", "INTEGER").await?;
+    ensure_column(pool, "track_audio_sources", "end_sample", "INTEGER").await?;
+    ensure_column(pool, "track_audio_sources", "start_ms", "INTEGER").await?;
+    ensure_column(pool, "track_audio_sources", "end_ms", "INTEGER").await?;
+    ensure_column(
+        pool,
+        "track_audio_sources",
+        "renderer",
+        "TEXT NOT NULL DEFAULT 'passthrough'",
+    )
+    .await?;
+
+    sqlx::query(
+        "UPDATE track_audio_sources
+         SET renderer = 'ffmpeg_cue'
+         WHERE renderer = 'unsupported_cue'",
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn ensure_column(
+    pool: &SqlitePool,
+    table: &'static str,
+    column: &'static str,
+    definition: &'static str,
+) -> Result<()> {
+    let columns = table_columns(pool, table).await?;
+    if columns.contains(column) {
+        return Ok(());
+    }
+    let sql = format!("ALTER TABLE {table} ADD COLUMN {column} {definition}");
+    sqlx::query(&sql).execute(pool).await?;
+    Ok(())
+}
+
+async fn table_columns(pool: &SqlitePool, table: &'static str) -> Result<HashSet<String>> {
+    let sql = format!("PRAGMA table_info({table})");
+    let rows = sqlx::query(&sql).fetch_all(pool).await?;
+    rows.into_iter()
+        .map(|row| row.try_get::<String, _>("name").map_err(Into::into))
+        .collect()
 }
 
 const SCHEMA: &str = r#"

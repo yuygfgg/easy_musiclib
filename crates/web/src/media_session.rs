@@ -1,5 +1,6 @@
 use easy_musiclib_shared::{Id, TrackSummary};
-use wasm_bindgen::{JsCast, JsValue};
+use std::rc::Rc;
+use wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 
 pub(crate) fn update_media_session(track: &TrackSummary, title_override: Option<&str>) {
     let Some(session) = browser_media_session() else {
@@ -45,6 +46,69 @@ pub(crate) fn update_media_position_state(position: f64, duration: f64, playback
         &JsValue::from_f64(position.clamp(0.0, duration)),
     );
     let _ = set_position_state.call1(&session, state.as_ref());
+}
+
+pub(crate) fn install_media_seek_handlers(
+    seek_to: impl Fn(f64) + 'static,
+    seek_by: impl Fn(f64) + 'static,
+) {
+    let Some(session) = browser_media_session() else {
+        return;
+    };
+    let Ok(set_action_handler) =
+        js_sys::Reflect::get(&session, &JsValue::from_str("setActionHandler"))
+            .and_then(|value| value.dyn_into::<js_sys::Function>())
+    else {
+        return;
+    };
+
+    let seek_to = Rc::new(seek_to);
+    let seek_by = Rc::new(seek_by);
+
+    let seek_to_handler = Closure::<dyn FnMut(JsValue)>::wrap(Box::new({
+        let seek_to = seek_to.clone();
+        move |details| {
+            if let Some(position) = numeric_detail(&details, "seekTime") {
+                seek_to(position);
+            }
+        }
+    }));
+    let _ = set_action_handler.call2(
+        &session,
+        &JsValue::from_str("seekto"),
+        seek_to_handler.as_ref(),
+    );
+    seek_to_handler.forget();
+
+    let seek_forward_handler = Closure::<dyn FnMut(JsValue)>::wrap(Box::new({
+        let seek_by = seek_by.clone();
+        move |details| {
+            seek_by(numeric_detail(&details, "seekOffset").unwrap_or(10.0));
+        }
+    }));
+    let _ = set_action_handler.call2(
+        &session,
+        &JsValue::from_str("seekforward"),
+        seek_forward_handler.as_ref(),
+    );
+    seek_forward_handler.forget();
+
+    let seek_backward_handler = Closure::<dyn FnMut(JsValue)>::wrap(Box::new(move |details| {
+        seek_by(-numeric_detail(&details, "seekOffset").unwrap_or(10.0));
+    }));
+    let _ = set_action_handler.call2(
+        &session,
+        &JsValue::from_str("seekbackward"),
+        seek_backward_handler.as_ref(),
+    );
+    seek_backward_handler.forget();
+}
+
+fn numeric_detail(details: &JsValue, key: &str) -> Option<f64> {
+    js_sys::Reflect::get(details, &JsValue::from_str(key))
+        .ok()
+        .and_then(|value| value.as_f64())
+        .filter(|value| value.is_finite())
 }
 
 fn browser_media_session() -> Option<JsValue> {

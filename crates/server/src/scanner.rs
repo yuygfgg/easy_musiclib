@@ -1,10 +1,14 @@
 use crate::db;
 use anyhow::{Context, Result};
-use easy_musiclib_media::cue::{apply_audio_timing, cue_year, parse_cue_file};
-use easy_musiclib_media::tags::{AudioTags, read_audio_tags};
-use easy_musiclib_media::{
-    DiscoveredFile, discover_files, is_audio_extension, path_hash, supported_extension,
+use easy_musiclib_media::cue::{self, apply_audio_timing, cue_year, parse_cue_file};
+use easy_musiclib_media::formats::{
+    PASSTHROUGH_RENDERER, cue_renderer_id_for_format_id, format_by_extension, read_audio_metadata,
 };
+use easy_musiclib_media::path_hash;
+use easy_musiclib_media::providers::{
+    DiscoveredAudioFile, DiscoveredCueFile, discover_library_files,
+};
+use easy_musiclib_media::tags::AudioTags;
 use sqlx::{Row, SqlitePool};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -31,16 +35,16 @@ pub async fn run_scan(pool: &SqlitePool, job_id: i64, roots: Vec<String>) -> Res
     db::update_scan_job_counts(pool, job_id, "running", None, Some(0), None, false).await?;
     ensure_default_split_exceptions(pool).await?;
 
-    let files = tokio::task::spawn_blocking({
+    let discovered = tokio::task::spawn_blocking({
         let roots = roots.clone();
-        move || discover_files(&roots)
+        move || discover_library_files(&roots)
     })
     .await??;
     db::update_scan_job_counts(
         pool,
         job_id,
         "running",
-        Some(files.len() as i64),
+        Some(discovered.len() as i64),
         Some(0),
         None,
         false,
@@ -48,7 +52,7 @@ pub async fn run_scan(pool: &SqlitePool, job_id: i64, roots: Vec<String>) -> Res
     .await?;
 
     let mut cue_audio_paths = HashSet::new();
-    for file in files.iter().filter(|f| f.format == "cue") {
+    for file in &discovered.cues {
         if let Ok(sheet) = parse_cue_file(&file.path) {
             cue_audio_paths.insert(normalize_path_key(&sheet.audio_path));
         }
@@ -57,7 +61,7 @@ pub async fn run_scan(pool: &SqlitePool, job_id: i64, roots: Vec<String>) -> Res
     let exceptions = split_exceptions(pool).await?;
     let mut scanned = 0i64;
 
-    for file in files.iter().filter(|f| f.format == "cue") {
+    for file in &discovered.cues {
         if let Err(err) = process_cue(pool, file, &exceptions).await {
             tracing::error!(path = %file.path.display(), error = %err, "failed to process cue file");
         }
@@ -66,7 +70,7 @@ pub async fn run_scan(pool: &SqlitePool, job_id: i64, roots: Vec<String>) -> Res
             .await?;
     }
 
-    for file in files.iter().filter(|f| is_audio_extension(&f.path)) {
+    for file in &discovered.audio {
         if cue_audio_paths.contains(&normalize_path_key(&file.path)) {
             scanned += 1;
             db::update_scan_job_counts(pool, job_id, "running", None, Some(scanned), None, false)
@@ -90,7 +94,7 @@ pub async fn run_scan(pool: &SqlitePool, job_id: i64, roots: Vec<String>) -> Res
 
 async fn process_audio_file(
     pool: &SqlitePool,
-    file: &DiscoveredFile,
+    file: &DiscoveredAudioFile,
     exceptions: &[String],
 ) -> Result<()> {
     let path_string = file.path.to_string_lossy().to_string();
@@ -107,7 +111,7 @@ async fn process_audio_file(
         return Ok(());
     }
     db::delete_tracks_for_media_file(pool, media_file_id).await?;
-    match read_audio_tags(&file.path, exceptions) {
+    match read_audio_metadata(&file.path, exceptions) {
         Ok(tags) => {
             sqlx::query(
                 "UPDATE media_files SET scan_error = NULL, sample_rate = ?, channels = ?, duration_ms = ? WHERE id = ?",
@@ -189,7 +193,7 @@ async fn write_audio_track(
             end_sample: None,
             start_ms: None,
             end_ms: None,
-            renderer: "passthrough",
+            renderer: PASSTHROUGH_RENDERER,
         },
     )
     .await?;
@@ -206,7 +210,7 @@ async fn write_audio_track(
 
 async fn process_cue(
     pool: &SqlitePool,
-    file: &DiscoveredFile,
+    file: &DiscoveredCueFile,
     exceptions: &[String],
 ) -> Result<()> {
     let path_string = file.path.to_string_lossy().to_string();
@@ -216,7 +220,7 @@ async fn process_cue(
         &file.path_hash,
         file.size,
         file.mtime_ns,
-        "cue",
+        cue::FORMAT_ID,
     )
     .await?;
 
@@ -232,7 +236,9 @@ async fn process_cue(
         }
     };
     let audio_meta = file_meta(&sheet.audio_path)?;
-    let audio_format = supported_extension(&sheet.audio_path).unwrap_or("flac");
+    let audio_format = format_by_extension(&sheet.audio_path)
+        .map(|format| format.id())
+        .unwrap_or("unknown");
     let audio_path = sheet.audio_path.to_string_lossy().to_string();
     let (audio_file_id, audio_changed) = db::upsert_media_file(
         pool,
@@ -253,39 +259,40 @@ async fn process_cue(
     }
     db::delete_cue_sheet_for_file(pool, cue_file_id).await?;
 
-    let audio_tags = read_audio_tags(&sheet.audio_path, exceptions).unwrap_or_else(|_| AudioTags {
-        title: sheet
-            .album_title
-            .clone()
-            .unwrap_or_else(|| "Unknown Title".to_string()),
-        album: sheet
-            .album_title
-            .clone()
-            .unwrap_or_else(|| "Unknown Album".to_string()),
-        artists: sheet
-            .performer
-            .clone()
-            .map(|s| vec![s])
-            .unwrap_or_else(|| vec!["Unknown Artist".to_string()]),
-        album_artists: sheet
-            .performer
-            .clone()
-            .map(|s| vec![s])
-            .unwrap_or_else(|| vec!["Unknown Artist".to_string()]),
-        raw_artists: Vec::new(),
-        raw_album_artists: Vec::new(),
-        track_number: None,
-        disc_number: Some(1),
-        date: sheet.date.clone(),
-        year: cue_year(&sheet),
-        event: None,
-        duration_ms: None,
-        sample_rate: None,
-        channels: None,
-        embedded_picture: None,
-        sidecar_artwork: None,
-        format: audio_format.to_string(),
-    });
+    let audio_tags =
+        read_audio_metadata(&sheet.audio_path, exceptions).unwrap_or_else(|_| AudioTags {
+            title: sheet
+                .album_title
+                .clone()
+                .unwrap_or_else(|| "Unknown Title".to_string()),
+            album: sheet
+                .album_title
+                .clone()
+                .unwrap_or_else(|| "Unknown Album".to_string()),
+            artists: sheet
+                .performer
+                .clone()
+                .map(|s| vec![s])
+                .unwrap_or_else(|| vec!["Unknown Artist".to_string()]),
+            album_artists: sheet
+                .performer
+                .clone()
+                .map(|s| vec![s])
+                .unwrap_or_else(|| vec!["Unknown Artist".to_string()]),
+            raw_artists: Vec::new(),
+            raw_album_artists: Vec::new(),
+            track_number: None,
+            disc_number: Some(1),
+            date: sheet.date.clone(),
+            year: cue_year(&sheet),
+            event: None,
+            duration_ms: None,
+            sample_rate: None,
+            channels: None,
+            embedded_picture: None,
+            sidecar_artwork: None,
+            format: audio_format.to_string(),
+        });
     sqlx::query(
         "UPDATE media_files SET scan_error = NULL, sample_rate = ?, channels = ?, duration_ms = ? WHERE id = ?",
     )
@@ -372,11 +379,7 @@ async fn process_cue(
             &artist_ids,
         )
         .await?;
-        let renderer = match audio_format {
-            "flac" => "flac_tracksplit",
-            "wav" => "wav_slice",
-            _ => "unsupported_cue",
-        };
+        let renderer = cue_renderer_id_for_format_id(audio_format);
         db::insert_track_audio_source(
             pool,
             track_id,

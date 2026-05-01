@@ -9,9 +9,10 @@ use crate::ui::{
 };
 use crate::util::{album_date, paged_status, pretty_json};
 use easy_musiclib_shared::{
-    AlbumDetail, AlbumSummary, AliasCsvImportRequest, ArtistDetail, ArtistSummary,
-    CreateArtistRequest, EventDetail, EventSummary, LikePatch, MergeArtistsRequest, RelationGraph,
-    ScanJobRequest, ScanJobStatus, TrackSummary,
+    AlbumDetail, AlbumSummary, AliasCsvImportRequest, AppSettings, ArtistDetail, ArtistSummary,
+    BrowserPlaybackFormat, CreateArtistRequest, EventDetail, EventSummary, LikePatch,
+    MergeArtistsRequest, RelationGraph, ScanJobRequest, ScanJobStatus, TrackSummary,
+    UpdateAppSettingsRequest,
 };
 use leptos::prelude::*;
 
@@ -624,6 +625,20 @@ pub(crate) fn SettingsPage() -> impl IntoView {
     let (by_name, set_by_name) = signal(false);
     let (alias_csv, set_alias_csv) = signal(String::new());
     let (settings_status, set_settings_status) = signal(String::new());
+    let (browser_playback_format, set_browser_playback_format) =
+        signal(BrowserPlaybackFormat::default());
+
+    Effect::new(move |_| {
+        wasm_bindgen_futures::spawn_local(async move {
+            match api_get::<AppSettings>("/api/settings").await {
+                Ok(settings) => {
+                    set_browser_playback_format.set(settings.browser_playback_format);
+                    set_settings_status.set(String::from("Settings loaded"));
+                }
+                Err(err) => set_settings_status.set(err),
+            }
+        });
+    });
 
     let start_scan = move |_| {
         let root = scan_root.get_untracked().trim().to_string();
@@ -700,6 +715,18 @@ pub(crate) fn SettingsPage() -> impl IntoView {
         });
     };
 
+    let save_playback = move |_| {
+        let req = UpdateAppSettingsRequest {
+            browser_playback_format: browser_playback_format.get_untracked(),
+        };
+        wasm_bindgen_futures::spawn_local(async move {
+            match api_patch_json::<AppSettings, _>("/api/settings", &req).await {
+                Ok(data) => set_settings_status.set(pretty_json(&data)),
+                Err(err) => set_settings_status.set(err),
+            }
+        });
+    };
+
     view! {
         <section class="page settings">
             <header class="page-header">
@@ -708,6 +735,32 @@ pub(crate) fn SettingsPage() -> impl IntoView {
                     <p>"Library maintenance and artist cleanup"</p>
                 </div>
             </header>
+            <section class="settings-section">
+                <h3>"Playback"</h3>
+                <div class="settings-grid">
+                    <label class="checkbox-row">
+                        <input
+                            type="radio"
+                            name="browser-playback-format"
+                            prop:checked=move || browser_playback_format.get() == BrowserPlaybackFormat::Opus256k
+                            on:change=move |_| set_browser_playback_format.set(BrowserPlaybackFormat::Opus256k)
+                        />
+                        "Opus 256k"
+                    </label>
+                    <label class="checkbox-row">
+                        <input
+                            type="radio"
+                            name="browser-playback-format"
+                            prop:checked=move || browser_playback_format.get() == BrowserPlaybackFormat::Flac48k
+                            on:change=move |_| set_browser_playback_format.set(BrowserPlaybackFormat::Flac48k)
+                        />
+                        "FLAC 48kHz"
+                    </label>
+                </div>
+                <div class="button-row">
+                    <button type="button" on:click=save_playback>"Save playback"</button>
+                </div>
+            </section>
             <section class="settings-section">
                 <h3>"Scan"</h3>
                 <div class="field-row">

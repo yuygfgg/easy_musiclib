@@ -14,6 +14,7 @@ chrono.workspace = true
 easy_musiclib_media = { path = "../media" }
 easy_musiclib_shared = { path = "../shared" }
 futures.workspace = true
+hex.workspace = true
 html-escape.workspace = true
 http.workspace = true
 http-body-util.workspace = true

@@ -13,7 +13,7 @@ const METADATA_VORBIS_COMMENT: u8 = 4;
 const METADATA_CUESHEET: u8 = 5;
 const MIN_STREAMINFO_BLOCK_SIZE: u16 = 16;
 
-pub fn render_flac_cue_track_exact(
+pub(super) fn render_cue_track_exact(
     path: &Path,
     start_sample: i64,
     end_sample: Option<i64>,

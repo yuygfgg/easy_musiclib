@@ -11,12 +11,18 @@ use axum::http::header::{
 };
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
-use easy_musiclib_media::render::{RenderTags, render_flac_cue_track, render_wav_slice};
-use easy_musiclib_media::tags::read_embedded_picture;
+use easy_musiclib_media::formats::{
+    PASSTHROUGH_RENDERER, is_playable_renderer, read_audio_metadata,
+    read_embedded_picture_for_path, render_cue_track_by_renderer,
+    transcode_file_range_for_browser_to_fd,
+};
+use easy_musiclib_media::render::{PlaybackTranscodeFormat, RenderTags};
 use easy_musiclib_shared::*;
 use serde::Deserialize;
 use sqlx::Row;
 use std::io::Cursor;
+use std::os::fd::IntoRawFd;
+use std::os::unix::net::UnixStream as StdUnixStream;
 use std::path::PathBuf;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
@@ -50,6 +56,11 @@ pub struct RelationQuery {
 #[derive(Debug, Deserialize)]
 pub struct ArtworkQuery {
     size: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StreamQuery {
+    start_ms: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,7 +108,7 @@ pub async fn get_track(
     Path(id): Path<String>,
 ) -> ApiResult<Json<TrackDetail>> {
     let id = db::resolve_id(&state.pool, "tracks", &id).await?;
-    Ok(Json(db::fetch_track_detail(&state.pool, id).await?))
+    Ok(Json(fetch_track_detail_with_duration(&state, id).await?))
 }
 
 pub async fn list_albums(
@@ -215,7 +226,7 @@ pub async fn patch_track(
 ) -> ApiResult<Json<TrackDetail>> {
     let id = db::resolve_id(&state.pool, "tracks", &id).await?;
     db::set_liked(&state.pool, "tracks", id, patch.liked).await?;
-    Ok(Json(db::fetch_track_detail(&state.pool, id).await?))
+    Ok(Json(fetch_track_detail_with_duration(&state, id).await?))
 }
 
 pub async fn patch_album(
@@ -246,6 +257,189 @@ pub async fn patch_event(
     let id = db::resolve_id(&state.pool, "events", &id).await?;
     db::set_liked(&state.pool, "events", id, patch.liked).await?;
     Ok(Json(db::fetch_event_detail(&state.pool, id).await?))
+}
+
+async fn fetch_track_detail_with_duration(state: &AppState, id: i64) -> ApiResult<TrackDetail> {
+    ensure_track_duration_ms(state, id).await?;
+    Ok(db::fetch_track_detail(&state.pool, id).await?)
+}
+
+async fn ensure_track_duration_ms(state: &AppState, id: i64) -> ApiResult<()> {
+    let Some(source) = track_duration_source(state, id).await? else {
+        return Ok(());
+    };
+    if source.track_duration_ms.is_some() {
+        return Ok(());
+    }
+
+    match infer_track_duration_ms(&source).await {
+        Ok(Some(duration_ms)) => {
+            persist_track_duration_ms(state, &source, duration_ms).await?;
+        }
+        Ok(None) => {}
+        Err(err) => {
+            tracing::warn!(
+                track_id = id,
+                path = %source.path.as_deref().unwrap_or(""),
+                error = %err,
+                "failed to infer track duration"
+            );
+        }
+    }
+    Ok(())
+}
+
+async fn track_duration_source(
+    state: &AppState,
+    id: i64,
+) -> ApiResult<Option<TrackDurationSource>> {
+    let row = sqlx::query(
+        "SELECT
+            t.duration_ms AS track_duration_ms,
+            tas.kind, tas.media_file_id, tas.sample_rate, tas.start_sample, tas.end_sample,
+            tas.start_ms, tas.end_ms,
+            mf.path, mf.duration_ms AS media_duration_ms
+         FROM tracks t
+         LEFT JOIN track_audio_sources tas ON tas.track_id = t.id
+         LEFT JOIN media_files mf ON mf.id = tas.media_file_id
+         WHERE t.id = ?",
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    Ok(Some(TrackDurationSource {
+        track_id: id,
+        track_duration_ms: row.try_get("track_duration_ms")?,
+        kind: row.try_get("kind")?,
+        media_file_id: row.try_get("media_file_id")?,
+        path: row.try_get("path")?,
+        media_duration_ms: row.try_get("media_duration_ms")?,
+        sample_rate: row.try_get("sample_rate")?,
+        start_sample: row.try_get("start_sample")?,
+        end_sample: row.try_get("end_sample")?,
+        start_ms: row.try_get("start_ms")?,
+        end_ms: row.try_get("end_ms")?,
+    }))
+}
+
+async fn infer_track_duration_ms(source: &TrackDurationSource) -> anyhow::Result<Option<i64>> {
+    if let (Some(start_ms), Some(end_ms)) = (source.start_ms, source.end_ms) {
+        return Ok(positive_duration(end_ms.saturating_sub(start_ms)));
+    }
+    if let (Some(sample_rate), Some(start_sample), Some(end_sample)) =
+        (source.sample_rate, source.start_sample, source.end_sample)
+    {
+        if sample_rate > 0 {
+            return Ok(positive_duration(
+                end_sample.saturating_sub(start_sample).saturating_mul(1000) / sample_rate,
+            ));
+        }
+    }
+
+    let file_duration_ms = match source.media_duration_ms {
+        Some(duration_ms) => Some(duration_ms),
+        None => read_source_duration_ms(source).await?,
+    };
+    let Some(file_duration_ms) = file_duration_ms else {
+        return Ok(None);
+    };
+    if source.kind.as_deref() == Some("cue") {
+        let start_ms = source
+            .start_ms
+            .or_else(|| cue_start_ms_from_samples(source))
+            .unwrap_or(0);
+        return Ok(positive_duration(file_duration_ms.saturating_sub(start_ms)));
+    }
+    Ok(positive_duration(file_duration_ms))
+}
+
+async fn read_source_duration_ms(source: &TrackDurationSource) -> anyhow::Result<Option<i64>> {
+    let Some(path) = source.path.clone() else {
+        return Ok(None);
+    };
+    let tags = tokio::task::spawn_blocking(move || {
+        let path = PathBuf::from(path);
+        read_audio_metadata(&path, &[])
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!(e.to_string()))??;
+    Ok(tags.duration_ms)
+}
+
+fn cue_start_ms_from_samples(source: &TrackDurationSource) -> Option<i64> {
+    let sample_rate = source.sample_rate?;
+    let start_sample = source.start_sample?;
+    (sample_rate > 0).then_some(start_sample.saturating_mul(1000) / sample_rate)
+}
+
+fn positive_duration(duration_ms: i64) -> Option<i64> {
+    (duration_ms > 0).then_some(duration_ms)
+}
+
+async fn persist_track_duration_ms(
+    state: &AppState,
+    source: &TrackDurationSource,
+    duration_ms: i64,
+) -> ApiResult<()> {
+    sqlx::query(
+        "UPDATE tracks
+         SET duration_ms = ?
+         WHERE id = ? AND duration_ms IS NULL",
+    )
+    .bind(duration_ms)
+    .bind(source.track_id)
+    .execute(&state.pool)
+    .await?;
+
+    if source.kind.as_deref() == Some("cue") {
+        if source.end_ms.is_none() {
+            if let Some(start_ms) = source
+                .start_ms
+                .or_else(|| cue_start_ms_from_samples(source))
+            {
+                sqlx::query(
+                    "UPDATE track_audio_sources
+                     SET start_ms = COALESCE(start_ms, ?), end_ms = ?
+                     WHERE track_id = ? AND end_ms IS NULL",
+                )
+                .bind(start_ms)
+                .bind(start_ms.saturating_add(duration_ms))
+                .bind(source.track_id)
+                .execute(&state.pool)
+                .await?;
+            }
+        }
+    } else if source.media_duration_ms.is_none() {
+        if let Some(media_file_id) = source.media_file_id {
+            sqlx::query(
+                "UPDATE media_files
+                 SET duration_ms = ?
+                 WHERE id = ? AND duration_ms IS NULL",
+            )
+            .bind(duration_ms)
+            .bind(media_file_id)
+            .execute(&state.pool)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+struct TrackDurationSource {
+    track_id: i64,
+    track_duration_ms: Option<i64>,
+    kind: Option<String>,
+    media_file_id: Option<i64>,
+    path: Option<String>,
+    media_duration_ms: Option<i64>,
+    sample_rate: Option<i64>,
+    start_sample: Option<i64>,
+    end_sample: Option<i64>,
+    start_ms: Option<i64>,
+    end_ms: Option<i64>,
 }
 
 pub async fn create_artist(
@@ -351,7 +545,7 @@ pub async fn lyrics_search(
 ) -> ApiResult<Json<Vec<LyricsCandidate>>> {
     let (track_id, title, artist, album, duration_ms) = if let Some(track_id) = q.track_id {
         let id = db::resolve_id(&state.pool, "tracks", &track_id).await?;
-        let detail = db::fetch_track_detail(&state.pool, id).await?;
+        let detail = fetch_track_detail_with_duration(&state, id).await?;
         (
             Some(id),
             detail.summary.title,
@@ -387,6 +581,17 @@ pub async fn lyrics_search(
         db::cache_lyrics(&state.pool, track_id, item).await.ok();
     }
     Ok(Json(results))
+}
+
+pub async fn get_settings(State(state): State<AppState>) -> ApiResult<Json<AppSettings>> {
+    Ok(Json(db::app_settings(&state.pool).await?))
+}
+
+pub async fn patch_settings(
+    State(state): State<AppState>,
+    Json(req): Json<UpdateAppSettingsRequest>,
+) -> ApiResult<Json<AppSettings>> {
+    Ok(Json(db::update_app_settings(&state.pool, req).await?))
 }
 
 async fn cached_lyrics(
@@ -457,7 +662,7 @@ pub async fn artwork(
                 .media_path
                 .ok_or_else(|| AppError::not_found("artwork source has no media path"))?;
             tokio::task::spawn_blocking(move || {
-                read_embedded_picture(
+                read_embedded_picture_for_path(
                     std::path::Path::new(&path),
                     source.embedded_picture_index.unwrap_or(0),
                 )
@@ -494,9 +699,9 @@ pub async fn artwork(
 pub async fn stream_track(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    headers: HeaderMap,
+    Query(q): Query<StreamQuery>,
 ) -> ApiResult<Response> {
-    render_track_response(state, id, headers, false).await
+    stream_track_response(state, id, q.start_ms.unwrap_or(0)).await
 }
 
 pub async fn download_track(
@@ -507,6 +712,23 @@ pub async fn download_track(
     render_track_response(state, id, headers, true).await
 }
 
+async fn stream_track_response(
+    state: AppState,
+    id: String,
+    requested_start_ms: i64,
+) -> ApiResult<Response> {
+    let id = db::resolve_id(&state.pool, "tracks", &id).await?;
+    let source = db::track_render_source(&state.pool, id).await?;
+    if !is_playable_renderer(Some(&source.renderer)) {
+        return Err(AppError::bad_request("track is not playable"));
+    }
+    ensure_track_duration_ms(&state, id).await?;
+    let source = db::track_render_source(&state.pool, id).await?;
+    let playback_format =
+        media_playback_format(db::app_settings(&state.pool).await?.browser_playback_format);
+    stream_browser_audio(source, playback_format, requested_start_ms).await
+}
+
 async fn render_track_response(
     state: AppState,
     id: String,
@@ -515,40 +737,101 @@ async fn render_track_response(
 ) -> ApiResult<Response> {
     let id = db::resolve_id(&state.pool, "tracks", &id).await?;
     let source = db::track_render_source(&state.pool, id).await?;
-    match source.renderer.as_str() {
-        "passthrough" => passthrough_file(&source.path, &source.title, headers, download).await,
-        "flac_tracksplit" => {
-            let tags = RenderTags {
-                title: source.title.clone(),
-                artist: source.artist.clone(),
-                album: source.album.clone(),
-                track_no: source.track_no,
-                date: source.date.clone(),
-            };
-            let path = PathBuf::from(source.path.clone());
-            let bytes = tokio::task::spawn_blocking(move || {
-                render_flac_cue_track(
-                    &path,
-                    source.start_sample.unwrap_or(0),
-                    source.end_sample,
-                    &tags,
-                )
-            })
-            .await
-            .map_err(|e| AppError::internal(e.to_string()))??;
-            Ok(audio_response(bytes, "audio/flac", &source.title, download))
-        }
-        "wav_slice" => {
-            let path = PathBuf::from(source.path.clone());
-            let bytes = tokio::task::spawn_blocking(move || {
-                render_wav_slice(&path, source.start_sample.unwrap_or(0), source.end_sample)
-            })
-            .await
-            .map_err(|e| AppError::internal(e.to_string()))??;
-            Ok(audio_response(bytes, "audio/wav", &source.title, download))
-        }
-        _ => Err(AppError::bad_request("track is not playable")),
+    if source.renderer == PASSTHROUGH_RENDERER {
+        return passthrough_file(&source.path, &source.title, headers, download).await;
     }
+    if !is_playable_renderer(Some(&source.renderer)) {
+        return Err(AppError::bad_request("track is not playable"));
+    }
+
+    let tags = RenderTags {
+        title: source.title.clone(),
+        artist: source.artist.clone(),
+        album: source.album.clone(),
+        track_no: source.track_no,
+        date: source.date.clone(),
+    };
+    let renderer = source.renderer.clone();
+    let path = PathBuf::from(source.path.clone());
+    let start_sample = source.start_sample.unwrap_or(0);
+    let end_sample = source.end_sample;
+    let rendered = tokio::task::spawn_blocking(move || {
+        render_cue_track_by_renderer(&renderer, &path, start_sample, end_sample, &tags)
+    })
+    .await
+    .map_err(|e| AppError::internal(e.to_string()))??;
+    Ok(audio_bytes_response(
+        rendered.bytes,
+        rendered.mime,
+        rendered.extension,
+        &source.title,
+        download,
+        &headers,
+    ))
+}
+
+fn media_playback_format(format: BrowserPlaybackFormat) -> PlaybackTranscodeFormat {
+    match format {
+        BrowserPlaybackFormat::Opus256k => PlaybackTranscodeFormat::Opus256k,
+        BrowserPlaybackFormat::Flac48k => PlaybackTranscodeFormat::Flac48k,
+    }
+}
+
+async fn stream_browser_audio(
+    source: db::RenderSourceRow,
+    playback_format: PlaybackTranscodeFormat,
+    requested_start_ms: i64,
+) -> ApiResult<Response> {
+    let track_start_ms = source.start_ms.unwrap_or(0).max(0);
+    let relative_start_ms = requested_start_ms.max(0);
+    let mut absolute_start_ms = track_start_ms.saturating_add(relative_start_ms);
+    if let Some(end_ms) = source.end_ms {
+        absolute_start_ms = absolute_start_ms.min(end_ms.saturating_sub(1).max(track_start_ms));
+    }
+
+    let (reader, writer) = StdUnixStream::pair()?;
+    reader.set_nonblocking(true)?;
+    let reader = tokio::net::UnixStream::from_std(reader)?;
+    let output_fd = writer.into_raw_fd();
+    let input_path = PathBuf::from(source.path.clone());
+    let end_ms = source.end_ms;
+    let title = source.title.clone();
+    tokio::task::spawn_blocking(move || {
+        if let Err(err) = transcode_file_range_for_browser_to_fd(
+            &input_path,
+            playback_format,
+            absolute_start_ms,
+            end_ms,
+            output_fd,
+        ) {
+            tracing::debug!(
+                path = %input_path.display(),
+                start_ms = absolute_start_ms,
+                error = %err,
+                "browser transcode stream ended with error"
+            );
+        }
+    });
+
+    let stream = ReaderStream::with_capacity(reader, 64 * 1024);
+    let mut response = (StatusCode::OK, Body::from_stream(stream)).into_response();
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static(playback_format.mime()),
+    );
+    response
+        .headers_mut()
+        .insert(ACCEPT_RANGES, HeaderValue::from_static("none"));
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!(
+            "inline; filename*=UTF-8''{}.{}",
+            percent_encoding::utf8_percent_encode(&title, percent_encoding::NON_ALPHANUMERIC),
+            playback_format.extension(),
+        ))
+        .unwrap(),
+    );
+    Ok(response)
 }
 
 async fn passthrough_file(
@@ -557,28 +840,102 @@ async fn passthrough_file(
     headers: HeaderMap,
     download: bool,
 ) -> ApiResult<Response> {
-    let mut file = tokio::fs::File::open(path).await?;
-    let len = file.metadata().await?.len();
-    let mime = mime_guess::from_path(path)
+    let path = PathBuf::from(path);
+    let mime = mime_guess::from_path(&path)
         .first_raw()
         .unwrap_or("application/octet-stream")
         .to_string();
-    let range = headers
-        .get(RANGE)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| parse_range(s, len));
-    let (status, start, end) = if let Some((start, end)) = range {
-        (StatusCode::PARTIAL_CONTENT, start, end)
-    } else {
-        (StatusCode::OK, 0, len.saturating_sub(1))
+    ranged_file_response(&path, &mime, Some((title, "")), &headers, download).await
+}
+
+async fn ranged_file_response(
+    path: &PathBuf,
+    mime: &str,
+    download_name: Option<(&str, &str)>,
+    headers: &HeaderMap,
+    download: bool,
+) -> ApiResult<Response> {
+    let mut file = tokio::fs::File::open(path).await?;
+    let len = file.metadata().await?.len();
+    let (status, start, end) = match requested_range(headers, len) {
+        RequestedRange::None => (StatusCode::OK, 0, len.saturating_sub(1)),
+        RequestedRange::Valid(start, end) => (StatusCode::PARTIAL_CONTENT, start, end),
+        RequestedRange::Invalid => return Ok(range_not_satisfiable_response(len, Some(mime))),
     };
-    let read_len = end.saturating_sub(start).saturating_add(1);
+    let read_len = if len == 0 {
+        0
+    } else {
+        end.saturating_sub(start).saturating_add(1)
+    };
     file.seek(std::io::SeekFrom::Start(start)).await?;
     let stream = ReaderStream::new(file.take(read_len));
     let mut response = (status, Body::from_stream(stream)).into_response();
     response
         .headers_mut()
-        .insert(CONTENT_TYPE, HeaderValue::from_str(&mime).unwrap());
+        .insert(CONTENT_TYPE, HeaderValue::from_str(mime).unwrap());
+    response.headers_mut().insert(
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&read_len.to_string()).unwrap(),
+    );
+    response
+        .headers_mut()
+        .insert(ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    if status == StatusCode::PARTIAL_CONTENT {
+        response.headers_mut().insert(
+            CONTENT_RANGE,
+            HeaderValue::from_str(&format!("bytes {start}-{end}/{len}")).unwrap(),
+        );
+    }
+    if download {
+        let Some((title, extension)) = download_name else {
+            return Ok(response);
+        };
+        let suffix = if extension.is_empty() {
+            String::new()
+        } else {
+            format!(".{extension}")
+        };
+        response.headers_mut().insert(
+            CONTENT_DISPOSITION,
+            HeaderValue::from_str(&format!(
+                "attachment; filename*=UTF-8''{}{}",
+                percent_encoding::utf8_percent_encode(title, percent_encoding::NON_ALPHANUMERIC),
+                suffix
+            ))
+            .unwrap(),
+        );
+    }
+    Ok(response)
+}
+
+fn audio_bytes_response(
+    bytes: Vec<u8>,
+    mime: &str,
+    extension: &str,
+    title: &str,
+    download: bool,
+    headers: &HeaderMap,
+) -> Response {
+    let len = bytes.len() as u64;
+    let (status, start, end) = if download {
+        (StatusCode::OK, 0, len.saturating_sub(1))
+    } else {
+        match requested_range(headers, len) {
+            RequestedRange::None => (StatusCode::OK, 0, len.saturating_sub(1)),
+            RequestedRange::Valid(start, end) => (StatusCode::PARTIAL_CONTENT, start, end),
+            RequestedRange::Invalid => return range_not_satisfiable_response(len, Some(mime)),
+        }
+    };
+    let body = if len == 0 {
+        bytes
+    } else {
+        bytes[start as usize..=end as usize].to_vec()
+    };
+    let read_len = body.len();
+    let mut response = (status, Body::from(body)).into_response();
+    response
+        .headers_mut()
+        .insert(CONTENT_TYPE, HeaderValue::from_str(mime).unwrap());
     response.headers_mut().insert(
         CONTENT_LENGTH,
         HeaderValue::from_str(&read_len.to_string()).unwrap(),
@@ -596,27 +953,36 @@ async fn passthrough_file(
         response.headers_mut().insert(
             CONTENT_DISPOSITION,
             HeaderValue::from_str(&format!(
-                "attachment; filename*=UTF-8''{}",
-                percent_encoding::utf8_percent_encode(title, percent_encoding::NON_ALPHANUMERIC)
+                "attachment; filename*=UTF-8''{}.{}",
+                percent_encoding::utf8_percent_encode(title, percent_encoding::NON_ALPHANUMERIC),
+                extension,
             ))
             .unwrap(),
         );
     }
-    Ok(response)
+    response
 }
 
-fn audio_response(bytes: Vec<u8>, mime: &str, title: &str, download: bool) -> Response {
-    let mut response = binary_response(StatusCode::OK, bytes, mime, Some(title), false);
-    if download {
-        response.headers_mut().insert(
-            CONTENT_DISPOSITION,
-            HeaderValue::from_str(&format!(
-                "attachment; filename*=UTF-8''{}.{}",
-                percent_encoding::utf8_percent_encode(title, percent_encoding::NON_ALPHANUMERIC),
-                if mime == "audio/wav" { "wav" } else { "flac" }
-            ))
-            .unwrap(),
-        );
+fn range_not_satisfiable_response(len: u64, mime: Option<&str>) -> Response {
+    let mut response = (
+        StatusCode::RANGE_NOT_SATISFIABLE,
+        Body::from(Vec::<u8>::new()),
+    )
+        .into_response();
+    response
+        .headers_mut()
+        .insert(CONTENT_LENGTH, HeaderValue::from_static("0"));
+    response
+        .headers_mut()
+        .insert(ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    response.headers_mut().insert(
+        CONTENT_RANGE,
+        HeaderValue::from_str(&format!("bytes */{len}")).unwrap(),
+    );
+    if let Some(mime) = mime {
+        response
+            .headers_mut()
+            .insert(CONTENT_TYPE, HeaderValue::from_str(mime).unwrap());
     }
     response
 }
@@ -654,11 +1020,36 @@ fn resize_image(bytes: Vec<u8>, size: u32) -> anyhow::Result<Vec<u8>> {
     Ok(out.into_inner())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RequestedRange {
+    None,
+    Valid(u64, u64),
+    Invalid,
+}
+
+fn requested_range(headers: &HeaderMap, len: u64) -> RequestedRange {
+    let Some(range) = headers.get(RANGE) else {
+        return RequestedRange::None;
+    };
+    let Ok(range) = range.to_str() else {
+        return RequestedRange::Invalid;
+    };
+    parse_range(range, len)
+        .map(|(start, end)| RequestedRange::Valid(start, end))
+        .unwrap_or(RequestedRange::Invalid)
+}
+
 fn parse_range(range: &str, len: u64) -> Option<(u64, u64)> {
+    if len == 0 {
+        return None;
+    }
     let range = range.strip_prefix("bytes=")?;
     let (start, end) = range.split_once('-')?;
     if start.is_empty() {
         let suffix = end.parse::<u64>().ok()?;
+        if suffix == 0 {
+            return None;
+        }
         let start = len.saturating_sub(suffix);
         return Some((start, len.saturating_sub(1)));
     }
@@ -681,5 +1072,120 @@ async fn resolve_opt(
             Ok(Some(db::resolve_id(&state.pool, kind, &value).await?))
         }
         _ => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use easy_musiclib_media::path_hash;
+    use sqlx::sqlite::SqlitePoolOptions;
+    use std::io::Write;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn fetch_track_detail_backfills_missing_file_duration() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        crate::schema::init_db(&pool).await.unwrap();
+
+        let temp = tempfile::tempdir().unwrap();
+        let wav_path = temp.path().join("legacy.wav");
+        write_test_wav(&wav_path, 2, 8_000);
+
+        let metadata = std::fs::metadata(&wav_path).unwrap();
+        let (media_file_id, _) = db::upsert_media_file(
+            &pool,
+            &wav_path.to_string_lossy(),
+            &path_hash(&wav_path),
+            metadata.len().try_into().unwrap(),
+            0,
+            "wav",
+        )
+        .await
+        .unwrap();
+        let track_id = db::insert_track(
+            &pool,
+            db::NewTrack {
+                title: "Legacy WAV",
+                album_id: None,
+                event_id: None,
+                cue_track_no: None,
+                disc_no: None,
+                track_no: None,
+                duration_ms: None,
+                date: None,
+                year: None,
+                artwork_id: None,
+            },
+            &[],
+        )
+        .await
+        .unwrap();
+        db::insert_track_audio_source(
+            &pool,
+            track_id,
+            db::NewTrackAudioSource {
+                kind: "file",
+                media_file_id,
+                cue_sheet_id: None,
+                codec: "wav",
+                sample_rate: None,
+                start_sample: None,
+                end_sample: None,
+                start_ms: None,
+                end_ms: None,
+                renderer: PASSTHROUGH_RENDERER,
+            },
+        )
+        .await
+        .unwrap();
+
+        let state = AppState {
+            pool: pool.clone(),
+            static_dir: Arc::new(temp.path().to_path_buf()),
+        };
+        let detail = fetch_track_detail_with_duration(&state, track_id)
+            .await
+            .unwrap();
+        let duration_ms = detail.summary.duration_ms.unwrap();
+        assert!((1_900..=2_100).contains(&duration_ms));
+
+        let stored: i64 = sqlx::query_scalar("SELECT duration_ms FROM tracks WHERE id = ?")
+            .bind(track_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(stored, duration_ms);
+    }
+
+    fn write_test_wav(path: &std::path::Path, seconds: u32, sample_rate: u32) {
+        let channels = 1_u16;
+        let bits_per_sample = 16_u16;
+        let samples = seconds * sample_rate;
+        let data_len = samples * u32::from(channels) * u32::from(bits_per_sample / 8);
+        let mut file = std::fs::File::create(path).unwrap();
+
+        file.write_all(b"RIFF").unwrap();
+        file.write_all(&(36 + data_len).to_le_bytes()).unwrap();
+        file.write_all(b"WAVE").unwrap();
+        file.write_all(b"fmt ").unwrap();
+        file.write_all(&16_u32.to_le_bytes()).unwrap();
+        file.write_all(&1_u16.to_le_bytes()).unwrap();
+        file.write_all(&channels.to_le_bytes()).unwrap();
+        file.write_all(&sample_rate.to_le_bytes()).unwrap();
+        file.write_all(&(sample_rate * u32::from(channels) * 2).to_le_bytes())
+            .unwrap();
+        file.write_all(&(channels * 2).to_le_bytes()).unwrap();
+        file.write_all(&bits_per_sample.to_le_bytes()).unwrap();
+        file.write_all(b"data").unwrap();
+        file.write_all(&data_len.to_le_bytes()).unwrap();
+
+        for _ in 0..samples {
+            file.write_all(&0_i16.to_le_bytes()).unwrap();
+        }
     }
 }

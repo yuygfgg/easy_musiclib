@@ -166,6 +166,38 @@ pub struct ScanJobStatus {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BrowserPlaybackFormat {
+    #[serde(rename = "opus_256k")]
+    Opus256k,
+    #[serde(rename = "flac_48k")]
+    Flac48k,
+}
+
+impl Default for BrowserPlaybackFormat {
+    fn default() -> Self {
+        Self::Opus256k
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppSettings {
+    pub browser_playback_format: BrowserPlaybackFormat,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            browser_playback_format: BrowserPlaybackFormat::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateAppSettingsRequest {
+    pub browser_playback_format: BrowserPlaybackFormat,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LikePatch {
     pub liked: bool,

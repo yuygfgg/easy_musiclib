@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use easy_musiclib_media::formats::is_playable_renderer;
 use easy_musiclib_media::normalize::{fuzzy_score, normalize_name};
 use easy_musiclib_shared::*;
 use sqlx::sqlite::SqliteQueryResult;
@@ -8,6 +9,61 @@ use uuid::Uuid;
 
 pub fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
+}
+
+const BROWSER_PLAYBACK_FORMAT_SETTING: &str = "browser_playback_format";
+
+pub async fn app_settings(pool: &SqlitePool) -> Result<AppSettings> {
+    Ok(AppSettings {
+        browser_playback_format: setting_json(pool, BROWSER_PLAYBACK_FORMAT_SETTING)
+            .await?
+            .unwrap_or_default(),
+    })
+}
+
+pub async fn update_app_settings(
+    pool: &SqlitePool,
+    req: UpdateAppSettingsRequest,
+) -> Result<AppSettings> {
+    put_setting_json(
+        pool,
+        BROWSER_PLAYBACK_FORMAT_SETTING,
+        &req.browser_playback_format,
+    )
+    .await?;
+    app_settings(pool).await
+}
+
+async fn setting_json<T>(pool: &SqlitePool, key: &str) -> Result<Option<T>>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let Some(row) = sqlx::query("SELECT value_json FROM app_settings WHERE key = ?")
+        .bind(key)
+        .fetch_optional(pool)
+        .await?
+    else {
+        return Ok(None);
+    };
+    let raw: String = row.try_get("value_json")?;
+    Ok(Some(serde_json::from_str(&raw)?))
+}
+
+async fn put_setting_json<T>(pool: &SqlitePool, key: &str, value: &T) -> Result<()>
+where
+    T: serde::Serialize,
+{
+    sqlx::query(
+        "INSERT INTO app_settings (key, value_json, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at",
+    )
+    .bind(key)
+    .bind(serde_json::to_string(value)?)
+    .bind(now_ms())
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn resolve_id(pool: &SqlitePool, kind: &str, ident: &str) -> Result<i64> {
@@ -146,10 +202,7 @@ async fn track_summary_from_row(
         date: row.try_get("date")?,
         liked_at: row.try_get("liked_at")?,
         is_cue: row.try_get::<Option<i64>, _>("cue_track_no")?.is_some(),
-        playable: matches!(
-            renderer.as_deref(),
-            Some("passthrough" | "flac_tracksplit" | "wav_slice")
-        ),
+        playable: is_playable_renderer(renderer.as_deref()),
     })
 }
 
