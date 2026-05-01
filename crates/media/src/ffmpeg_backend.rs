@@ -1,5 +1,8 @@
 use crate::formats::{CueRenderQuality, CueTrackRenderer, FFMPEG_CUE_RENDERER};
-use crate::render::{PlaybackTranscodeFormat, RenderTags, TranscodedAudio};
+use crate::render::{
+    FLAC_HLS_INIT_FILE, FLAC_HLS_PLAYLIST_FILE, FLAC_HLS_SEGMENT_PATTERN, FLAC_HLS_SEGMENT_SECONDS,
+    PlaybackTranscodeFormat, RenderTags, TranscodedAudio,
+};
 use anyhow::{Context, Result, anyhow};
 use ffmpeg::{codec, filter, format, frame, media};
 use ffmpeg_next as ffmpeg;
@@ -113,6 +116,44 @@ pub fn transcode_bytes_for_browser(
     transcode_file_to_bytes(&input_path, FfmpegOutput::Playback(format), None)
 }
 
+pub fn render_flac_48k_hls(
+    path: &Path,
+    output_dir: &Path,
+    start_ms: i64,
+    end_ms: Option<i64>,
+) -> Result<()> {
+    init_ffmpeg()?;
+    fs::create_dir_all(output_dir)
+        .with_context(|| format!("creating HLS output directory {}", output_dir.display()))?;
+    let playlist_path = output_dir.join(FLAC_HLS_PLAYLIST_FILE);
+    let segment_pattern = output_dir.join(FLAC_HLS_SEGMENT_PATTERN);
+    let mut ictx =
+        format::input(path).with_context(|| format!("opening ffmpeg input {}", path.display()))?;
+    let mut octx = format::output_as(&playlist_path, "hls")
+        .with_context(|| format!("opening HLS output {}", playlist_path.display()))?;
+    let mut options = ffmpeg::Dictionary::new();
+    options.set("hls_time", &format!("{FLAC_HLS_SEGMENT_SECONDS:.3}"));
+    options.set("hls_playlist_type", "event");
+    options.set("hls_list_size", "0");
+    options.set("hls_segment_type", "fmp4");
+    options.set("hls_fmp4_init_filename", FLAC_HLS_INIT_FILE);
+    let segment_pattern = segment_pattern.to_string_lossy().into_owned();
+    options.set("hls_segment_filename", &segment_pattern);
+    transcode_contexts_with_options(
+        &mut ictx,
+        &mut octx,
+        &playlist_path,
+        FfmpegOutput::HlsFlac48k,
+        Some(FilterRange::Time(TimeRange {
+            start_ms: start_ms.max(0),
+            end_ms,
+        })),
+        Some(options),
+    )?;
+    finalize_hls_playlist(&playlist_path)?;
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy)]
 struct SampleRange {
     start: i64,
@@ -135,6 +176,7 @@ enum FilterRange {
 enum FfmpegOutput {
     FlacSourceRate,
     Playback(PlaybackTranscodeFormat),
+    HlsFlac48k,
 }
 
 impl FfmpegOutput {
@@ -142,6 +184,7 @@ impl FfmpegOutput {
         match self {
             Self::FlacSourceRate => "audio/flac",
             Self::Playback(format) => format.mime(),
+            Self::HlsFlac48k => "application/vnd.apple.mpegurl",
         }
     }
 
@@ -149,6 +192,7 @@ impl FfmpegOutput {
         match self {
             Self::FlacSourceRate => "flac",
             Self::Playback(format) => format.extension(),
+            Self::HlsFlac48k => "m3u8",
         }
     }
 
@@ -156,6 +200,7 @@ impl FfmpegOutput {
         match self {
             Self::FlacSourceRate | Self::Playback(PlaybackTranscodeFormat::Flac48k) => "flac",
             Self::Playback(PlaybackTranscodeFormat::Opus256k) => "ogg",
+            Self::HlsFlac48k => "hls",
         }
     }
 
@@ -164,12 +209,15 @@ impl FfmpegOutput {
             Self::FlacSourceRate => CueRenderQuality::Lossless,
             Self::Playback(PlaybackTranscodeFormat::Opus256k) => CueRenderQuality::Lossy,
             Self::Playback(PlaybackTranscodeFormat::Flac48k) => CueRenderQuality::Lossless,
+            Self::HlsFlac48k => CueRenderQuality::Lossless,
         }
     }
 
     fn encoder_name(self) -> Option<&'static str> {
         match self {
-            Self::FlacSourceRate | Self::Playback(PlaybackTranscodeFormat::Flac48k) => Some("flac"),
+            Self::FlacSourceRate
+            | Self::Playback(PlaybackTranscodeFormat::Flac48k)
+            | Self::HlsFlac48k => Some("flac"),
             Self::Playback(PlaybackTranscodeFormat::Opus256k) => Some("libopus"),
         }
     }
@@ -177,7 +225,7 @@ impl FfmpegOutput {
     fn target_rate(self, source_rate: u32) -> u32 {
         match self {
             Self::FlacSourceRate => source_rate,
-            Self::Playback(_) => 48_000,
+            Self::Playback(_) | Self::HlsFlac48k => 48_000,
         }
     }
 
@@ -285,17 +333,36 @@ impl Drop for RawFdGuard {
 
 fn transcode_contexts(
     ictx: &mut format::context::Input,
+    octx: &mut format::context::Output,
+    output_path: &Path,
+    output: FfmpegOutput,
+    range: Option<FilterRange>,
+) -> Result<TranscodeStats> {
+    transcode_contexts_with_options(ictx, octx, output_path, output, range, None)
+}
+
+fn transcode_contexts_with_options(
+    ictx: &mut format::context::Input,
     mut octx: &mut format::context::Output,
     output_path: &Path,
     output: FfmpegOutput,
     range: Option<FilterRange>,
+    header_options: Option<ffmpeg::Dictionary<'_>>,
 ) -> Result<TranscodeStats> {
     seek_input_for_range(ictx, range)?;
     let mut transcoder = Transcoder::new(ictx, octx, output_path, output, range)?;
 
     octx.set_metadata(ictx.metadata().to_owned());
-    octx.write_header()
-        .context("writing ffmpeg output header")?;
+    match header_options {
+        Some(options) => {
+            octx.write_header_with(options)
+                .context("writing ffmpeg output header")?;
+        }
+        None => {
+            octx.write_header()
+                .context("writing ffmpeg output header")?;
+        }
+    }
 
     for (stream, mut packet) in ictx.packets() {
         if stream.index() == transcoder.stream {
@@ -324,6 +391,13 @@ fn transcode_contexts(
     Ok(TranscodeStats {
         samples: transcoder.encoded_duration,
     })
+}
+
+fn finalize_hls_playlist(path: &Path) -> Result<()> {
+    let playlist = fs::read_to_string(path)
+        .with_context(|| format!("reading HLS playlist {}", path.display()))?;
+    let playlist = playlist.replace("#EXT-X-PLAYLIST-TYPE:EVENT", "#EXT-X-PLAYLIST-TYPE:VOD");
+    fs::write(path, playlist).with_context(|| format!("writing HLS playlist {}", path.display()))
 }
 
 fn seek_input_for_range(
@@ -775,8 +849,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn renders_flac_48k_hls_vod_playlist() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source.wav");
+        let hls_dir = dir.path().join("hls");
+        write_test_wav(&source, 5, 96_000);
+
+        render_flac_48k_hls(&source, &hls_dir, 0, None).unwrap();
+
+        let playlist_path = hls_dir.join(FLAC_HLS_PLAYLIST_FILE);
+        let playlist = fs::read_to_string(&playlist_path).unwrap();
+        assert!(playlist.contains("#EXT-X-PLAYLIST-TYPE:VOD"));
+        assert!(playlist.contains("#EXT-X-MAP:URI=\"init.mp4\""));
+        assert!(playlist.contains("segment_00000.m4s"));
+        assert!(hls_dir.join(FLAC_HLS_INIT_FILE).exists());
+        assert!(hls_dir.join("segment_00000.m4s").exists());
+
+        init_ffmpeg().unwrap();
+        let ictx = format::input(&playlist_path).unwrap();
+        let input = ictx.streams().best(media::Type::Audio).unwrap();
+        let context = ffmpeg::codec::context::Context::from_parameters(input.parameters()).unwrap();
+        let mut decoder = context.decoder().audio().unwrap();
+        decoder.set_parameters(input.parameters()).unwrap();
+        assert_eq!(decoder.rate(), 48_000);
+        assert_duration_ms("flac hls", &playlist_path, &[], 4_500);
+    }
+
     fn assert_duration_ms(label: &str, path: &Path, bytes: &[u8], min_ms: i64) {
-        fs::write(path, bytes).unwrap();
+        if !bytes.is_empty() {
+            fs::write(path, bytes).unwrap();
+        }
         init_ffmpeg().unwrap();
         let ictx = format::input(path).unwrap();
         assert!(

@@ -10,7 +10,9 @@ use crate::media_session::{
 use crate::route::Page;
 use crate::ui::{ArtistInlineLinks, EntityLink};
 use crate::util::{format_time, progress_value};
-use easy_musiclib_shared::{LikePatch, LyricsCandidate, TrackDetail, TrackSummary};
+use easy_musiclib_shared::{
+    AppSettings, BrowserPlaybackFormat, LikePatch, LyricsCandidate, TrackDetail, TrackSummary,
+};
 use leptos::prelude::*;
 use std::rc::Rc;
 use wasm_bindgen::JsValue;
@@ -25,6 +27,11 @@ pub(crate) fn Player() -> impl IntoView {
     let (current_time, set_current_time) = signal(0.0_f64);
     let (duration, set_duration) = signal(0.0_f64);
     let (stream_start_time, set_stream_start_time) = signal(0.0_f64);
+    let (hls_playback, set_hls_playback) = signal(false);
+    let (pending_hls_seek, set_pending_hls_seek) = signal(None::<f64>);
+    let (browser_playback_format, set_browser_playback_format) =
+        signal(BrowserPlaybackFormat::default());
+    let (playback_mode, set_playback_mode) = signal(String::from("Idle"));
     let (seek_value, set_seek_value) = signal(0_i64);
     let (seeking, set_seeking) = signal(false);
     let (lyrics_open, set_lyrics_open) = signal(false);
@@ -46,6 +53,14 @@ pub(crate) fn Player() -> impl IntoView {
             String::from("No track playing")
         });
     };
+
+    Effect::new(move |_| {
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Ok(settings) = api_get::<AppSettings>("/api/settings").await {
+                set_browser_playback_format.set(settings.browser_playback_format);
+            }
+        });
+    });
 
     let sync_lyrics = move || {
         let lines = lyrics_lines.get_untracked();
@@ -112,9 +127,54 @@ pub(crate) fn Player() -> impl IntoView {
             return;
         };
         let position = clamp_position(position);
-        set_stream_start_time.set(position);
-        set_display_position(position);
         if let Some(audio) = audio_ref.get() {
+            let playback_format = browser_playback_format.get_untracked();
+            if should_use_flac_hls(&audio, playback_format) {
+                let url = hls_url(track.id);
+                let same_src = hls_playback.get_untracked() && audio.current_src().ends_with(&url);
+                set_hls_playback.set(true);
+                set_playback_mode.set(String::from("FLAC HLS"));
+                set_stream_start_time.set(0.0);
+                set_display_position(position);
+                if same_src {
+                    set_pending_hls_seek.set(None);
+                    audio.set_current_time(position);
+                } else {
+                    let _ = audio.pause();
+                    audio.set_src(&url);
+                    audio.load();
+                    if position > 0.0 {
+                        set_pending_hls_seek.set(Some(position));
+                    } else {
+                        set_pending_hls_seek.set(None);
+                    }
+                }
+                if autoplay {
+                    match audio.play() {
+                        Ok(promise) => {
+                            let set_status = ctx.set_status;
+                            let title = track.title.clone();
+                            wasm_bindgen_futures::spawn_local(async move {
+                                match JsFuture::from(promise).await {
+                                    Ok(_) => set_status.set(format!("Playing {title}")),
+                                    Err(err) => set_status.set(js_error_text(err)),
+                                }
+                            });
+                        }
+                        Err(err) => ctx.set_status.set(js_error_text(err)),
+                    }
+                }
+                return;
+            }
+
+            set_pending_hls_seek.set(None);
+            set_hls_playback.set(false);
+            set_playback_mode.set(stream_playback_mode(
+                playback_format,
+                needs_buffered_audio_response(),
+            ));
+            set_stream_start_time.set(position);
+            set_display_position(position);
             let _ = audio.pause();
             let start_ms = (position * 1000.0).round().max(0.0) as i64;
             audio.set_src(&stream_url(track.id, start_ms));
@@ -186,7 +246,9 @@ pub(crate) fn Player() -> impl IntoView {
     let update_audio_progress = move || {
         if let Some(audio) = audio_ref.get() {
             let duration_value = track_duration();
-            let current = if duration_value > 0.0 {
+            let current = if hls_playback.get_untracked() {
+                audio.current_time()
+            } else if duration_value > 0.0 {
                 (stream_start_time.get_untracked() + audio.current_time()).min(duration_value)
             } else {
                 stream_start_time.get_untracked() + audio.current_time()
@@ -292,6 +354,7 @@ pub(crate) fn Player() -> impl IntoView {
                     <strong>{move || ctx.current_track.get().map(|track| track.title).unwrap_or_else(|| String::from("No track playing"))}</strong>
                     <span>{move || ctx.current_track.get().map(|track| view! { <ArtistInlineLinks artists=track.artists /> })}</span>
                     <small>{move || ctx.current_track.get().and_then(|track| track.album).map(|album| view! { <EntityLink page=Page::Album { id: album.id.to_string() } label=album.name /> })}</small>
+                    <small class="player-mode">{move || playback_mode.get()}</small>
                 </div>
             </div>
 
@@ -371,7 +434,15 @@ pub(crate) fn Player() -> impl IntoView {
                     update_media_session(&track, None);
                 }
             }
-            on:loadedmetadata=move |_| update_audio_progress()
+            on:loadedmetadata=move |_| {
+                if let Some(position) = pending_hls_seek.get_untracked() {
+                    if let Some(audio) = audio_ref.get() {
+                        audio.set_current_time(position);
+                    }
+                    set_pending_hls_seek.set(None);
+                }
+                update_audio_progress();
+            }
             on:timeupdate=move |_| update_audio_progress()
             on:error=move |_| {
                 if let Some(audio) = audio_ref.get() {
@@ -491,6 +562,30 @@ fn stream_url(track_id: i64, start_ms: i64) -> String {
         url.push_str("&buffered=true");
     }
     url
+}
+
+fn hls_url(track_id: i64) -> String {
+    format!("/api/tracks/{track_id}/hls/playlist.m3u8")
+}
+
+fn should_use_flac_hls(audio: &web_sys::HtmlAudioElement, format: BrowserPlaybackFormat) -> bool {
+    if format != BrowserPlaybackFormat::Flac48k {
+        return false;
+    }
+    audio
+        .can_play_type("application/vnd.apple.mpegurl; codecs=\"fLaC\"")
+        .eq("probably")
+        || audio
+            .can_play_type("audio/mpegurl; codecs=\"fLaC\"")
+            .eq("probably")
+}
+
+fn stream_playback_mode(format: BrowserPlaybackFormat, buffered: bool) -> String {
+    let transport = if buffered { "buffered" } else { "direct" };
+    match format {
+        BrowserPlaybackFormat::Opus256k => format!("{transport} Opus"),
+        BrowserPlaybackFormat::Flac48k => format!("{transport} FLAC"),
+    }
 }
 
 fn needs_buffered_audio_response() -> bool {

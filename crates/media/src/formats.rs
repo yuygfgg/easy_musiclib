@@ -252,6 +252,15 @@ pub fn transcode_rendered_cue_for_browser(
     ffmpeg_backend::transcode_bytes_for_browser(rendered.bytes, rendered.extension, format)
 }
 
+pub fn render_flac_48k_hls(
+    path: &Path,
+    output_dir: &Path,
+    start_ms: i64,
+    end_ms: Option<i64>,
+) -> Result<()> {
+    ffmpeg_backend::render_flac_48k_hls(path, output_dir, start_ms, end_ms)
+}
+
 pub(crate) fn read_prefix(path: &Path, buf: &mut [u8]) -> Result<usize> {
     let mut file = File::open(path).with_context(|| format!("opening {}", path.display()))?;
     file.read(buf)

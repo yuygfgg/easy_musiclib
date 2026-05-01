@@ -56,6 +56,10 @@ pub fn router(state: AppState) -> Router {
             get(handlers::get_track).patch(handlers::patch_track),
         )
         .route("/api/tracks/{id}/stream", get(handlers::stream_track))
+        .route(
+            "/api/tracks/{id}/hls/{file}",
+            get(handlers::stream_track_hls_file),
+        )
         .route("/api/tracks/{id}/download", get(handlers::download_track))
         .route("/api/albums", get(handlers::list_albums))
         .route(

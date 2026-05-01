@@ -2,6 +2,7 @@ use crate::db;
 use crate::lyrics;
 use crate::scanner;
 use crate::{ApiResult, AppError, AppState};
+use anyhow::Context;
 use axum::Json;
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -13,18 +14,26 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use easy_musiclib_media::formats::{
     PASSTHROUGH_RENDERER, is_playable_renderer, read_audio_metadata,
-    read_embedded_picture_for_path, render_cue_track_by_renderer, transcode_file_range_for_browser,
-    transcode_file_range_for_browser_to_fd,
+    read_embedded_picture_for_path, render_cue_track_by_renderer, render_flac_48k_hls,
+    transcode_file_range_for_browser, transcode_file_range_for_browser_to_fd,
 };
-use easy_musiclib_media::render::{PlaybackTranscodeFormat, RenderTags};
+use easy_musiclib_media::render::{
+    FLAC_HLS_INIT_FILE, FLAC_HLS_MEDIA_MIME, FLAC_HLS_PLAYLIST_FILE, FLAC_HLS_PLAYLIST_MIME,
+    PlaybackTranscodeFormat, RenderTags,
+};
 use easy_musiclib_shared::*;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use sqlx::Row;
+use std::collections::HashSet;
 use std::io::Cursor;
 use std::os::fd::IntoRawFd;
 use std::os::unix::net::UnixStream as StdUnixStream;
-use std::path::PathBuf;
+use std::path::{Path as FsPath, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::UNIX_EPOCH;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::time::{Duration, Instant, sleep};
 use tokio_util::io::ReaderStream;
 
 #[derive(Debug, Deserialize)]
@@ -713,6 +722,24 @@ pub async fn stream_track(
     .await
 }
 
+pub async fn stream_track_hls_file(
+    State(state): State<AppState>,
+    Path((id, file)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
+    let id = db::resolve_id(&state.pool, "tracks", &id).await?;
+    let source = db::track_render_source(&state.pool, id).await?;
+    if !is_playable_renderer(Some(&source.renderer)) {
+        return Err(AppError::bad_request("track is not playable"));
+    }
+    let cache_dir = hls_cache_dir(id, &source).await?;
+    let path = hls_file_path(&cache_dir, &file)?;
+    ensure_hls_generation(&source, &cache_dir).await?;
+    wait_for_hls_file(&path, hls_file_timeout(&file)).await?;
+    let mime = hls_file_mime(&file)?;
+    ranged_file_response(&path, mime, None, &headers, false).await
+}
+
 pub async fn download_track(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -745,6 +772,140 @@ async fn stream_track_response(
         headers,
     )
     .await
+}
+
+async fn hls_cache_dir(track_id: i64, source: &db::RenderSourceRow) -> ApiResult<PathBuf> {
+    let metadata = tokio::fs::metadata(&source.path).await?;
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    let mut hasher = Sha256::new();
+    hasher.update(b"flac-48k-fmp4-hls-v1");
+    hasher.update(track_id.to_le_bytes());
+    hasher.update(source.path.as_bytes());
+    hasher.update(source.renderer.as_bytes());
+    hasher.update(source.codec.as_bytes());
+    hasher.update(source.start_ms.unwrap_or(0).to_le_bytes());
+    hasher.update(source.end_ms.unwrap_or(-1).to_le_bytes());
+    hasher.update(metadata.len().to_le_bytes());
+    hasher.update(modified.to_le_bytes());
+    Ok(std::env::temp_dir()
+        .join("easy_musiclib_hls")
+        .join(hex::encode(hasher.finalize())))
+}
+
+fn hls_file_path(cache_dir: &FsPath, file: &str) -> ApiResult<PathBuf> {
+    if file.contains('/') || file.contains('\\') || file.contains("..") {
+        return Err(AppError::bad_request("invalid HLS file name"));
+    }
+    if file == FLAC_HLS_PLAYLIST_FILE || file == FLAC_HLS_INIT_FILE || is_hls_segment_file(file) {
+        return Ok(cache_dir.join(file));
+    }
+    Err(AppError::not_found("HLS file not found"))
+}
+
+fn is_hls_segment_file(file: &str) -> bool {
+    let Some(index) = file
+        .strip_prefix("segment_")
+        .and_then(|rest| rest.strip_suffix(".m4s"))
+    else {
+        return false;
+    };
+    index.len() == 5 && index.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn hls_file_mime(file: &str) -> ApiResult<&'static str> {
+    if file == FLAC_HLS_PLAYLIST_FILE {
+        Ok(FLAC_HLS_PLAYLIST_MIME)
+    } else if file == FLAC_HLS_INIT_FILE || is_hls_segment_file(file) {
+        Ok(FLAC_HLS_MEDIA_MIME)
+    } else {
+        Err(AppError::not_found("HLS file not found"))
+    }
+}
+
+fn hls_file_timeout(file: &str) -> Duration {
+    if file == FLAC_HLS_PLAYLIST_FILE || file == FLAC_HLS_INIT_FILE {
+        Duration::from_secs(15)
+    } else {
+        Duration::from_secs(30)
+    }
+}
+
+async fn ensure_hls_generation(source: &db::RenderSourceRow, cache_dir: &FsPath) -> ApiResult<()> {
+    if tokio::fs::metadata(hls_complete_path(cache_dir))
+        .await
+        .is_ok()
+    {
+        return Ok(());
+    }
+
+    let cache_dir = cache_dir.to_path_buf();
+    let should_start = {
+        let mut active = hls_generators()
+            .lock()
+            .map_err(|_| AppError::internal("HLS generator lock poisoned"))?;
+        active.insert(cache_dir.clone())
+    };
+    if !should_start {
+        return Ok(());
+    }
+
+    let input_path = PathBuf::from(source.path.clone());
+    let start_ms = source.start_ms.unwrap_or(0).max(0);
+    let end_ms = source.end_ms;
+    tokio::task::spawn_blocking(move || {
+        let result = (|| -> anyhow::Result<()> {
+            if cache_dir.exists() {
+                std::fs::remove_dir_all(&cache_dir)
+                    .with_context(|| format!("removing stale HLS cache {}", cache_dir.display()))?;
+            }
+            std::fs::create_dir_all(&cache_dir)
+                .with_context(|| format!("creating HLS cache {}", cache_dir.display()))?;
+            render_flac_48k_hls(&input_path, &cache_dir, start_ms, end_ms)?;
+            std::fs::write(hls_complete_path(&cache_dir), b"ok")
+                .with_context(|| format!("writing HLS complete marker {}", cache_dir.display()))?;
+            Ok(())
+        })();
+        if let Err(err) = result {
+            tracing::error!(
+                path = %input_path.display(),
+                cache_dir = %cache_dir.display(),
+                error = %err,
+                "failed to generate FLAC HLS"
+            );
+        }
+        if let Ok(mut active) = hls_generators().lock() {
+            active.remove(&cache_dir);
+        }
+    });
+
+    Ok(())
+}
+
+async fn wait_for_hls_file(path: &FsPath, timeout: Duration) -> ApiResult<()> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if tokio::fs::metadata(path).await.is_ok() {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(AppError::not_found("HLS file is not ready"));
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+}
+
+fn hls_complete_path(cache_dir: &FsPath) -> PathBuf {
+    cache_dir.join(".complete")
+}
+
+fn hls_generators() -> &'static Mutex<HashSet<PathBuf>> {
+    static ACTIVE: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
+    ACTIVE.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
 async fn render_track_response(

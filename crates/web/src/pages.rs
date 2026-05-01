@@ -715,13 +715,15 @@ pub(crate) fn SettingsPage() -> impl IntoView {
         });
     };
 
-    let save_playback = move |_| {
+    let save_playback = move |format: BrowserPlaybackFormat| {
+        set_browser_playback_format.set(format);
+        set_settings_status.set(String::from("Saving playback"));
         let req = UpdateAppSettingsRequest {
-            browser_playback_format: browser_playback_format.get_untracked(),
+            browser_playback_format: format,
         };
         wasm_bindgen_futures::spawn_local(async move {
             match api_patch_json::<AppSettings, _>("/api/settings", &req).await {
-                Ok(data) => set_settings_status.set(pretty_json(&data)),
+                Ok(_) => set_settings_status.set(String::from("Playback saved")),
                 Err(err) => set_settings_status.set(err),
             }
         });
@@ -743,7 +745,7 @@ pub(crate) fn SettingsPage() -> impl IntoView {
                             type="radio"
                             name="browser-playback-format"
                             prop:checked=move || browser_playback_format.get() == BrowserPlaybackFormat::Opus256k
-                            on:change=move |_| set_browser_playback_format.set(BrowserPlaybackFormat::Opus256k)
+                            on:change=move |_| save_playback(BrowserPlaybackFormat::Opus256k)
                         />
                         "Opus 256k"
                     </label>
@@ -752,13 +754,10 @@ pub(crate) fn SettingsPage() -> impl IntoView {
                             type="radio"
                             name="browser-playback-format"
                             prop:checked=move || browser_playback_format.get() == BrowserPlaybackFormat::Flac48k
-                            on:change=move |_| set_browser_playback_format.set(BrowserPlaybackFormat::Flac48k)
+                            on:change=move |_| save_playback(BrowserPlaybackFormat::Flac48k)
                         />
                         "FLAC 48kHz"
                     </label>
-                </div>
-                <div class="button-row">
-                    <button type="button" on:click=save_playback>"Save playback"</button>
                 </div>
             </section>
             <section class="settings-section">
