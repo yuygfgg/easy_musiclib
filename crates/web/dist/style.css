@@ -752,7 +752,7 @@ audio {
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;
-    padding-bottom: 170px;
+    padding-bottom: calc(170px + env(safe-area-inset-bottom));
   }
 
   .app-sidebar {
@@ -818,9 +818,32 @@ audio {
   }
 
   .player-bar {
-    height: 170px;
-    grid-template-columns: auto auto auto 1fr auto;
+    height: calc(170px + env(safe-area-inset-bottom));
+    grid-template-columns: repeat(3, 36px) minmax(0, 1fr) repeat(3, 36px);
+    grid-template-areas:
+      "prev toggle next spacer actions actions actions"
+      "track track track track track track track"
+      "progress progress progress progress progress progress progress";
     align-content: center;
+    gap: 8px 6px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .player-bar .player-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .player-prev {
+    grid-area: prev;
+  }
+
+  .player-toggle {
+    grid-area: toggle;
+  }
+
+  .player-next {
+    grid-area: next;
   }
 
   .player-track,
@@ -828,7 +851,16 @@ audio {
     grid-column: 1 / -1;
   }
 
+  .player-track {
+    grid-area: track;
+  }
+
+  .player-progress {
+    grid-area: progress;
+  }
+
   .player-actions {
+    grid-area: actions;
     justify-content: end;
   }
 

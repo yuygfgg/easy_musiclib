@@ -218,11 +218,11 @@ pub(crate) fn Player() -> impl IntoView {
 
     view! {
         <section class="player-bar" aria-label="Player">
-            <button class="player-icon" type="button" aria-label="Previous track" on:click=move |_| play_offset(-1)>"⏮"</button>
+            <button class="player-icon player-prev" type="button" aria-label="Previous track" on:click=move |_| play_offset(-1)>"⏮"</button>
             <button class="player-icon player-toggle" type="button" aria-label="Play or pause" on:click=toggle_play>
                 {move || if playing.get() { "⏸" } else { "▶" }}
             </button>
-            <button class="player-icon" type="button" aria-label="Next track" on:click=move |_| play_offset(1)>"⏭"</button>
+            <button class="player-icon player-next" type="button" aria-label="Next track" on:click=move |_| play_offset(1)>"⏭"</button>
 
             <div class="player-track">
                 <button class="player-art-button" type="button" aria-label="Open lyrics" on:click=move |_| set_lyrics_open.set(true)>

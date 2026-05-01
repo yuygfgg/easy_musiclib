@@ -1,12 +1,29 @@
 use crate::api::api_patch_json;
 use crate::app::{AppContext, PlayRequest};
+use crate::relation_layout::{
+    GRAPH_VIEWBOX_HEIGHT, GRAPH_VIEWBOX_WIDTH, LayoutPosition, clamp_graph_position,
+    layout_position, max_layout_shift, relation_graph_layout, relation_graph_layout_relax,
+    relation_graph_layout_tick,
+};
 use crate::route::Page;
-use crate::util::{album_date, circular_position, node_position, playable_tracks, total_pages};
+use crate::util::{album_date, playable_tracks, total_pages};
 use easy_musiclib_shared::{
-    AlbumSummary, ArtistSummary, EntityRef, EventSummary, Id, LikePatch, RelationGraph,
-    TrackDetail, TrackSummary,
+    AlbumSummary, ArtistSummary, EntityRef, EventSummary, Id, LikePatch, RelationEdge,
+    RelationGraph, RelationNode, TrackDetail, TrackSummary,
 };
 use leptos::prelude::*;
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
+use wasm_bindgen::{JsCast, JsValue, prelude::Closure};
+
+const RELAX_FRAME_LIMIT: u32 = 48;
+const RELAX_STOP_SHIFT: f64 = 0.18;
 
 #[component]
 pub(crate) fn TrackList(tracks: Signal<Vec<TrackSummary>>) -> impl IntoView {
@@ -303,8 +320,20 @@ pub(crate) fn Pager(
                 <span>{move || format!("/ {}", total_pages())}</span>
             </label>
             <button type="button" on:click=move |_| go()>"Go"</button>
-            <button type="button" disabled=move || page.get() >= total_pages() on:click=move |_| on_page.run(page.get_untracked() + 1)>"Next"</button>
-            <button type="button" disabled=move || page.get() >= total_pages() on:click=move |_| on_page.run(total_pages())>"Last"</button>
+            <button
+                type="button"
+                disabled=move || { page.get() >= total_pages() }
+                on:click=move |_| { on_page.run(page.get_untracked() + 1); }
+            >
+                "Next"
+            </button>
+            <button
+                type="button"
+                disabled=move || { page.get() >= total_pages() }
+                on:click=move |_| { on_page.run(total_pages()); }
+            >
+                "Last"
+            </button>
         </div>
     }
 }
@@ -312,44 +341,264 @@ pub(crate) fn Pager(
 #[component]
 pub(crate) fn RelationGraphView(graph: RelationGraph) -> impl IntoView {
     let ctx = expect_context::<AppContext>();
-    let nodes_for_edges = graph.nodes.clone();
-    let nodes_for_nodes = graph.nodes.clone();
-    let node_count = graph.nodes.len().max(1);
+    let graph_nodes = graph.nodes.clone();
+    let graph_edges = graph.edges.clone();
+    let edge_strength_range = edge_strength_range(&graph_edges);
+    let (positions, set_positions) = signal(relation_graph_layout(&graph_nodes, &graph_edges));
+    let (dragging, set_dragging) = signal::<Option<Id>>(None);
+    let relax_generation = Arc::new(AtomicU64::new(0));
+    let nodes_for_drag = graph_nodes.clone();
+    let edges_for_drag = graph_edges.clone();
+    let nodes_for_mouseup = graph_nodes.clone();
+    let edges_for_mouseup = graph_edges.clone();
+    let relax_generation_for_mouseup = relax_generation.clone();
+    let nodes_for_mouseleave = graph_nodes.clone();
+    let edges_for_mouseleave = graph_edges.clone();
+    let relax_generation_for_mouseleave = relax_generation.clone();
 
     view! {
-        <svg class="graph" viewBox="0 0 1200 700" role="img" aria-label="Artist relation graph">
+        <svg
+            class="graph"
+            viewBox="0 0 1200 700"
+            role="img"
+            aria-label="Artist relation graph"
+            on:mousemove=move |ev| {
+                let Some(node_id) = dragging.get_untracked() else {
+                    return;
+                };
+                ev.prevent_default();
+                let Some((x, y)) = graph_event_position(&ev) else {
+                    return;
+                };
+                set_positions.update(|positions| {
+                    let updated = relation_graph_layout_tick(
+                        &nodes_for_drag,
+                        &edges_for_drag,
+                        positions,
+                        LayoutPosition { id: node_id, x, y },
+                    );
+                    *positions = updated;
+                });
+            }
+            on:mouseup=move |ev| {
+                if dragging.get_untracked().is_some() {
+                    ev.prevent_default();
+                    set_dragging.set(None);
+                    start_layout_relax(
+                        nodes_for_mouseup.clone(),
+                        edges_for_mouseup.clone(),
+                        set_positions,
+                        dragging,
+                        relax_generation_for_mouseup.clone(),
+                    );
+                }
+            }
+            on:mouseleave=move |_| {
+                if dragging.get_untracked().is_some() {
+                    set_dragging.set(None);
+                    start_layout_relax(
+                        nodes_for_mouseleave.clone(),
+                        edges_for_mouseleave.clone(),
+                        set_positions,
+                        dragging,
+                        relax_generation_for_mouseleave.clone(),
+                    );
+                }
+            }
+        >
             <For
-                each=move || graph.edges.clone()
+                each=move || graph_edges.clone()
                 key=|edge| (edge.source, edge.target)
                 children=move |edge| {
-                    let (x1, y1) = node_position(&nodes_for_edges, edge.source);
-                    let (x2, y2) = node_position(&nodes_for_edges, edge.target);
+                    let source = edge.source;
+                    let target = edge.target;
+                    let style = relation_edge_style(edge.strength, edge_strength_range);
                     view! {
                         <line
                             class="link"
-                            x1=x1.to_string()
-                            y1=y1.to_string()
-                            x2=x2.to_string()
-                            y2=y2.to_string()
+                            x1=move || positions.with(|positions| layout_position(positions, source).0.to_string())
+                            y1=move || positions.with(|positions| layout_position(positions, source).1.to_string())
+                            x2=move || positions.with(|positions| layout_position(positions, target).0.to_string())
+                            y2=move || positions.with(|positions| layout_position(positions, target).1.to_string())
                             stroke-width=(1_i64 + edge.strength.min(5)).to_string()
+                            style=style
                         />
                     }
                 }
             />
             <For
-                each=move || { nodes_for_nodes.clone().into_iter().enumerate().collect::<Vec<_>>() }
-                key=|(_, node)| node.id
-                children=move |(index, node)| {
-                    let (x, y) = circular_position(index, node_count);
-                    let target = Page::Artist { id: node.id.to_string() };
+                each=move || { graph_nodes.clone() }
+                key=|node| node.id
+                children=move |node| {
+                    let node_id = node.id;
+                    let target = Page::Artist { id: node_id.to_string() };
+                    let name = node.name;
+                    let relax_generation_for_node = relax_generation.clone();
                     view! {
-                        <g class="node" transform=format!("translate({x},{y})") on:click=move |_| ctx.navigate.run(target.clone())>
+                        <g
+                            class="node"
+                            transform=move || positions.with(|positions| {
+                                let (x, y) = layout_position(positions, node_id);
+                                format!("translate({x},{y})")
+                            })
+                            style=move || {
+                                if dragging.get() == Some(node_id) {
+                                    "cursor: grabbing; user-select: none; touch-action: none;"
+                                } else {
+                                    "cursor: grab; user-select: none; touch-action: none;"
+                                }
+                            }
+                            on:mousedown=move |ev| {
+                                ev.prevent_default();
+                                ev.stop_propagation();
+                                relax_generation_for_node.fetch_add(1, Ordering::Relaxed);
+                                set_dragging.set(Some(node_id));
+                            }
+                            on:dblclick=move |ev| {
+                                ev.prevent_default();
+                                ev.stop_propagation();
+                                ctx.navigate.run(target.clone());
+                            }
+                        >
                             <circle r="9"></circle>
-                            <text x="14" y="4">{node.name}</text>
+                            <text x="14" y="4">{name}</text>
                         </g>
                     }
                 }
             />
         </svg>
     }
+}
+
+fn graph_event_position(ev: &leptos::ev::MouseEvent) -> Option<(f64, f64)> {
+    let target = js_sys::Reflect::get(ev.as_ref(), &JsValue::from_str("currentTarget")).ok()?;
+    if target.is_null() || target.is_undefined() {
+        return None;
+    }
+
+    let rect_fn = js_sys::Reflect::get(&target, &JsValue::from_str("getBoundingClientRect"))
+        .ok()?
+        .dyn_into::<js_sys::Function>()
+        .ok()?;
+    let rect = rect_fn.call0(&target).ok()?;
+    let left = js_property_number(&rect, "left")?;
+    let top = js_property_number(&rect, "top")?;
+    let width = js_property_number(&rect, "width")?.max(1.0);
+    let height = js_property_number(&rect, "height")?.max(1.0);
+    let x = (ev.client_x() as f64 - left) * GRAPH_VIEWBOX_WIDTH / width;
+    let y = (ev.client_y() as f64 - top) * GRAPH_VIEWBOX_HEIGHT / height;
+    Some(clamp_graph_position(x, y))
+}
+
+fn edge_strength_range(edges: &[RelationEdge]) -> (f64, f64) {
+    let mut min = f64::INFINITY;
+    let mut max = 0.0_f64;
+    for edge in edges {
+        let value = edge_strength_value(edge.strength);
+        min = min.min(value);
+        max = max.max(value);
+    }
+
+    if min.is_finite() && max > min {
+        (min, max)
+    } else {
+        (0.0, 1.0)
+    }
+}
+
+fn relation_edge_style(strength: i64, range: (f64, f64)) -> String {
+    let t = ((edge_strength_value(strength) - range.0) / (range.1 - range.0)).clamp(0.0, 1.0);
+    let (r, g, b) = if t < 0.5 {
+        interpolate_color((148, 163, 184), (47, 125, 225), t * 2.0)
+    } else {
+        interpolate_color((47, 125, 225), (226, 85, 47), (t - 0.5) * 2.0)
+    };
+    let opacity = 0.42 + t * 0.48;
+    format!("stroke: rgb({r}, {g}, {b}); stroke-opacity: {opacity:.2};")
+}
+
+fn edge_strength_value(strength: i64) -> f64 {
+    (strength.max(1) as f64).ln_1p()
+}
+
+fn interpolate_color(start: (u8, u8, u8), end: (u8, u8, u8), t: f64) -> (u8, u8, u8) {
+    let t = t.clamp(0.0, 1.0);
+    (
+        interpolate_channel(start.0, end.0, t),
+        interpolate_channel(start.1, end.1, t),
+        interpolate_channel(start.2, end.2, t),
+    )
+}
+
+fn interpolate_channel(start: u8, end: u8, t: f64) -> u8 {
+    (start as f64 + (end as f64 - start as f64) * t).round() as u8
+}
+
+fn start_layout_relax(
+    nodes: Vec<RelationNode>,
+    edges: Vec<RelationEdge>,
+    set_positions: WriteSignal<Vec<LayoutPosition>>,
+    dragging: ReadSignal<Option<Id>>,
+    generation: Arc<AtomicU64>,
+) {
+    let run_id = generation.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+
+    let nodes = Rc::new(nodes);
+    let edges = Rc::new(edges);
+    let frame = Rc::new(Cell::new(0_u32));
+    let last_shift = Rc::new(Cell::new(f64::INFINITY));
+    let callback = Rc::new(RefCell::new(None::<Closure<dyn FnMut()>>));
+    let callback_for_closure = callback.clone();
+
+    *callback.borrow_mut() = Some(Closure::<dyn FnMut()>::wrap(Box::new({
+        let nodes = nodes.clone();
+        let edges = edges.clone();
+        let frame = frame.clone();
+        let last_shift = last_shift.clone();
+        let generation = generation.clone();
+        move || {
+            if generation.load(Ordering::Relaxed) != run_id || dragging.get_untracked().is_some() {
+                callback_for_closure.borrow_mut().take();
+                return;
+            }
+
+            let current_frame = frame.get();
+            if current_frame >= RELAX_FRAME_LIMIT || last_shift.get() <= RELAX_STOP_SHIFT {
+                callback_for_closure.borrow_mut().take();
+                return;
+            }
+
+            frame.set(current_frame + 1);
+            set_positions.update(|positions| {
+                let updated = relation_graph_layout_relax(&nodes, &edges, positions, current_frame);
+                last_shift.set(max_layout_shift(positions, &updated));
+                *positions = updated;
+            });
+
+            if frame.get() >= RELAX_FRAME_LIMIT || last_shift.get() <= RELAX_STOP_SHIFT {
+                callback_for_closure.borrow_mut().take();
+                return;
+            }
+
+            if let Some(callback) = callback_for_closure.borrow().as_ref() {
+                request_animation_frame(callback);
+            }
+        }
+    })));
+
+    if let Some(callback) = callback.borrow().as_ref() {
+        request_animation_frame(callback);
+    }
+}
+
+fn request_animation_frame(callback: &Closure<dyn FnMut()>) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.request_animation_frame(callback.as_ref().unchecked_ref());
+    }
+}
+
+fn js_property_number(value: &JsValue, key: &str) -> Option<f64> {
+    js_sys::Reflect::get(value, &JsValue::from_str(key))
+        .ok()?
+        .as_f64()
 }

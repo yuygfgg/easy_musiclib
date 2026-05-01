@@ -4,6 +4,7 @@ mod lyrics;
 mod media_session;
 mod pages;
 mod player;
+mod relation_layout;
 mod route;
 mod ui;
 mod util;

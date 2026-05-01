@@ -1,4 +1,4 @@
-use easy_musiclib_shared::{Id, TrackSummary};
+use easy_musiclib_shared::TrackSummary;
 use serde::Serialize;
 
 pub(crate) const PAGE_SIZE: i64 = 100;
@@ -56,17 +56,4 @@ pub(crate) fn playable_tracks(tracks: Vec<TrackSummary>) -> Vec<TrackSummary> {
         .into_iter()
         .filter(|track| track.playable)
         .collect::<Vec<_>>()
-}
-
-pub(crate) fn circular_position(index: usize, total: usize) -> (f64, f64) {
-    let angle = (index as f64 / total.max(1) as f64) * std::f64::consts::TAU;
-    (600.0 + 430.0 * angle.cos(), 350.0 + 250.0 * angle.sin())
-}
-
-pub(crate) fn node_position(nodes: &[easy_musiclib_shared::RelationNode], id: Id) -> (f64, f64) {
-    nodes
-        .iter()
-        .position(|node| node.id == id)
-        .map(|index| circular_position(index, nodes.len()))
-        .unwrap_or((600.0, 350.0))
 }
