@@ -331,8 +331,10 @@ pub(crate) fn Player() -> impl IntoView {
             storage_set(&storage_key("lyrics_disabled", &track), "true");
             set_lyrics_lines.set(Vec::new());
             set_lyrics_loaded.set(false);
+            set_active_line.set(-1);
             set_lyrics_text.set(String::from("Disabled"));
             set_lyrics_selection_open.set(false);
+            update_media_session(&track, None);
         }
     };
 
