@@ -5,7 +5,8 @@ use crate::lyrics::{
     storage_set,
 };
 use crate::media_session::{
-    install_media_seek_handlers, js_error_text, update_media_position_state, update_media_session,
+    install_media_seek_handlers, install_media_track_handlers, js_error_text,
+    update_media_position_state, update_media_session,
 };
 use crate::route::Page;
 use crate::ui::{ArtistInlineLinks, EntityLink};
@@ -242,6 +243,7 @@ pub(crate) fn Player() -> impl IntoView {
             ctx.set_play_request.set(Some(PlayRequest { track }));
         }
     };
+    install_media_track_handlers(move || play_offset(-1), move || play_offset(1));
 
     let update_audio_progress = move || {
         if let Some(audio) = audio_ref.get() {

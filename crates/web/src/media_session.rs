@@ -104,6 +104,47 @@ pub(crate) fn install_media_seek_handlers(
     seek_backward_handler.forget();
 }
 
+pub(crate) fn install_media_track_handlers(
+    previous_track: impl Fn() + 'static,
+    next_track: impl Fn() + 'static,
+) {
+    let Some(session) = browser_media_session() else {
+        return;
+    };
+    let Ok(set_action_handler) =
+        js_sys::Reflect::get(&session, &JsValue::from_str("setActionHandler"))
+            .and_then(|value| value.dyn_into::<js_sys::Function>())
+    else {
+        return;
+    };
+
+    let previous_track = Rc::new(previous_track);
+    let next_track = Rc::new(next_track);
+
+    let previous_handler = Closure::<dyn FnMut(JsValue)>::wrap(Box::new({
+        let previous_track = previous_track.clone();
+        move |_| {
+            previous_track();
+        }
+    }));
+    let _ = set_action_handler.call2(
+        &session,
+        &JsValue::from_str("previoustrack"),
+        previous_handler.as_ref(),
+    );
+    previous_handler.forget();
+
+    let next_handler = Closure::<dyn FnMut(JsValue)>::wrap(Box::new(move |_| {
+        next_track();
+    }));
+    let _ = set_action_handler.call2(
+        &session,
+        &JsValue::from_str("nexttrack"),
+        next_handler.as_ref(),
+    );
+    next_handler.forget();
+}
+
 fn numeric_detail(details: &JsValue, key: &str) -> Option<f64> {
     js_sys::Reflect::get(details, &JsValue::from_str(key))
         .ok()
