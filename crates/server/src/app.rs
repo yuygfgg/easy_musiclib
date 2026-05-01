@@ -94,6 +94,7 @@ pub fn router(state: AppState) -> Router {
             "/api/settings",
             get(handlers::get_settings).patch(handlers::patch_settings),
         )
+        .route("/api/cache/hls/clear", post(handlers::clear_hls_cache))
         .route("/api/scan-jobs", post(handlers::create_scan_job))
         .route("/api/scan-jobs/{id}", get(handlers::get_scan_job))
         .route(

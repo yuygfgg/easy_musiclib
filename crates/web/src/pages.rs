@@ -10,8 +10,8 @@ use crate::ui::{
 use crate::util::{album_date, paged_status, pretty_json};
 use easy_musiclib_shared::{
     AlbumDetail, AlbumSummary, AliasCsvImportRequest, AppSettings, ArtistDetail, ArtistSummary,
-    BrowserPlaybackFormat, CreateArtistRequest, EventDetail, EventSummary, LikePatch,
-    MergeArtistsRequest, RelationGraph, ScanJobRequest, ScanJobStatus, TrackSummary,
+    BrowserPlaybackFormat, CreateArtistRequest, EventDetail, EventSummary, HlsCacheClearResponse,
+    LikePatch, MergeArtistsRequest, RelationGraph, ScanJobRequest, ScanJobStatus, TrackSummary,
     UpdateAppSettingsRequest,
 };
 use leptos::prelude::*;
@@ -729,6 +729,23 @@ pub(crate) fn SettingsPage() -> impl IntoView {
         });
     };
 
+    let clear_hls_cache = move |_| {
+        set_settings_status.set(String::from("Clearing HLS cache"));
+        wasm_bindgen_futures::spawn_local(async move {
+            match api_post_json::<HlsCacheClearResponse, _>(
+                "/api/cache/hls/clear",
+                &serde_json::json!({}),
+            )
+            .await
+            {
+                Ok(data) => {
+                    set_settings_status.set(format!("HLS cache cleared\n{}", pretty_json(&data)))
+                }
+                Err(err) => set_settings_status.set(err),
+            }
+        });
+    };
+
     view! {
         <section class="page settings">
             <header class="page-header">
@@ -758,6 +775,9 @@ pub(crate) fn SettingsPage() -> impl IntoView {
                         />
                         "FLAC 48kHz"
                     </label>
+                </div>
+                <div class="button-row">
+                    <button type="button" on:click=clear_hls_cache>"Clear HLS cache"</button>
                 </div>
             </section>
             <section class="settings-section">

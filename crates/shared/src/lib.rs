@@ -199,6 +199,15 @@ pub struct UpdateAppSettingsRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HlsCacheClearResponse {
+    pub cache_dir: String,
+    pub removed_files: u64,
+    pub removed_dirs: u64,
+    pub removed_bytes: u64,
+    pub skipped_active_generators: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LikePatch {
     pub liked: bool,
 }

@@ -26,7 +26,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use std::collections::HashSet;
-use std::io::Cursor;
+use std::io::{Cursor, ErrorKind};
 use std::os::fd::IntoRawFd;
 use std::os::unix::net::UnixStream as StdUnixStream;
 use std::path::{Path as FsPath, PathBuf};
@@ -604,6 +604,19 @@ pub async fn patch_settings(
     Ok(Json(db::update_app_settings(&state.pool, req).await?))
 }
 
+pub async fn clear_hls_cache() -> ApiResult<Json<HlsCacheClearResponse>> {
+    let root = hls_cache_root();
+    let summary = tokio::task::spawn_blocking(move || {
+        let active = hls_generators()
+            .lock()
+            .map_err(|_| anyhow::anyhow!("HLS generator lock poisoned"))?;
+        clear_hls_cache_root(&root, &active)
+    })
+    .await
+    .map_err(|e| AppError::internal(e.to_string()))??;
+    Ok(Json(summary))
+}
+
 async fn cached_lyrics(
     state: &AppState,
     track_id: Option<i64>,
@@ -792,9 +805,11 @@ async fn hls_cache_dir(track_id: i64, source: &db::RenderSourceRow) -> ApiResult
     hasher.update(source.end_ms.unwrap_or(-1).to_le_bytes());
     hasher.update(metadata.len().to_le_bytes());
     hasher.update(modified.to_le_bytes());
-    Ok(std::env::temp_dir()
-        .join("easy_musiclib_hls")
-        .join(hex::encode(hasher.finalize())))
+    Ok(hls_cache_root().join(hex::encode(hasher.finalize())))
+}
+
+fn hls_cache_root() -> PathBuf {
+    std::env::temp_dir().join("easy_musiclib_hls")
 }
 
 fn hls_file_path(cache_dir: &FsPath, file: &str) -> ApiResult<PathBuf> {
@@ -908,6 +923,107 @@ fn hls_generators() -> &'static Mutex<HashSet<PathBuf>> {
     ACTIVE.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
+fn clear_hls_cache_root(
+    root: &FsPath,
+    active_dirs: &HashSet<PathBuf>,
+) -> anyhow::Result<HlsCacheClearResponse> {
+    let mut summary = HlsCacheClearResponse {
+        cache_dir: root.to_string_lossy().into_owned(),
+        removed_files: 0,
+        removed_dirs: 0,
+        removed_bytes: 0,
+        skipped_active_generators: 0,
+    };
+
+    match std::fs::symlink_metadata(root) {
+        Ok(metadata) if metadata.is_dir() => {}
+        Ok(_) => {
+            remove_hls_cache_path(root, &mut summary)?;
+            return Ok(summary);
+        }
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(summary),
+        Err(err) => {
+            return Err(err).with_context(|| format!("reading HLS cache root {}", root.display()));
+        }
+    }
+
+    if active_dirs.is_empty() {
+        remove_hls_cache_path(root, &mut summary)?;
+        return Ok(summary);
+    }
+
+    for entry in std::fs::read_dir(root)
+        .with_context(|| format!("reading HLS cache root {}", root.display()))?
+    {
+        let path = entry
+            .with_context(|| format!("reading HLS cache root {}", root.display()))?
+            .path();
+        if active_dirs.contains(&path) {
+            summary.skipped_active_generators += 1;
+            continue;
+        }
+        remove_hls_cache_path(&path, &mut summary)?;
+    }
+
+    match std::fs::remove_dir(root) {
+        Ok(()) => summary.removed_dirs += 1,
+        Err(err)
+            if matches!(
+                err.kind(),
+                ErrorKind::NotFound | ErrorKind::DirectoryNotEmpty
+            ) => {}
+        Err(err) => {
+            return Err(err).with_context(|| format!("removing HLS cache root {}", root.display()));
+        }
+    }
+
+    Ok(summary)
+}
+
+fn remove_hls_cache_path(path: &FsPath, summary: &mut HlsCacheClearResponse) -> anyhow::Result<()> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(err) => {
+            return Err(err).with_context(|| format!("reading HLS cache path {}", path.display()));
+        }
+    };
+
+    if metadata.is_dir() {
+        for entry in
+            std::fs::read_dir(path).with_context(|| format!("reading {}", path.display()))?
+        {
+            let path = entry
+                .with_context(|| format!("reading {}", path.display()))?
+                .path();
+            remove_hls_cache_path(&path, summary)?;
+        }
+        match std::fs::remove_dir(path) {
+            Ok(()) => summary.removed_dirs += 1,
+            Err(err) if err.kind() == ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(err)
+                    .with_context(|| format!("removing HLS cache directory {}", path.display()));
+            }
+        }
+    } else {
+        let bytes = metadata.len();
+        match std::fs::remove_file(path) {
+            Ok(()) => {
+                summary.removed_files += 1;
+                summary.removed_bytes = summary.removed_bytes.saturating_add(bytes);
+            }
+            Err(err) if err.kind() == ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(err)
+                    .with_context(|| format!("removing HLS cache file {}", path.display()));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 async fn render_track_response(
     state: AppState,
     id: String,
@@ -964,7 +1080,9 @@ async fn stream_browser_audio(
     headers: HeaderMap,
 ) -> ApiResult<Response> {
     let (absolute_start_ms, end_ms) = browser_stream_time_range(&source, requested_start_ms);
-    if buffered || headers.get(RANGE).is_some() {
+    // Browsers often send `Range: bytes=0-` for media startup. This endpoint seeks
+    // by `start_ms`, so serving byte ranges would require a full transcode first.
+    if buffered {
         return buffered_browser_audio(source, playback_format, absolute_start_ms, end_ms, headers)
             .await;
     }
