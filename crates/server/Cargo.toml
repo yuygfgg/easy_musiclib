@@ -12,6 +12,7 @@ base64.workspace = true
 bytes.workspace = true
 chrono.workspace = true
 easy_musiclib_media = { path = "../media" }
+easy_musiclib_macros = { path = "../macros" }
 easy_musiclib_shared = { path = "../shared" }
 futures.workspace = true
 hex.workspace = true
@@ -20,6 +21,7 @@ http.workspace = true
 http-body-util.workspace = true
 image.workspace = true
 mime_guess.workspace = true
+o2o.workspace = true
 percent-encoding.workspace = true
 reqwest.workspace = true
 serde.workspace = true

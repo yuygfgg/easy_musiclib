@@ -1,4 +1,5 @@
 use crate::util::{PAGE_SIZE, pretty_json};
+use easy_musiclib_macros::{spawn_async, spawn_result};
 use easy_musiclib_shared::{ApiError, Id, ListResponse, ScanJobStatus};
 use gloo_net::http::{Request, Response};
 use leptos::prelude::*;
@@ -18,18 +19,97 @@ pub(crate) fn spawn_list_load<T>(
 ) where
     T: DeserializeOwned + Send + Sync + 'static,
 {
-    wasm_bindgen_futures::spawn_local(async move {
-        match api_get::<ListResponse<T>>(&url).await {
-            Ok(data) => {
-                let total = data.total.unwrap_or(data.items.len() as i64);
-                set_items.set(data.items);
-                set_page.set(target_page);
-                set_total.set(total);
-                set_status.set(format!("{total} {label}"));
-            }
-            Err(err) => set_status.set(err),
+    spawn_result! {
+        api_get::<ListResponse<T>>(&url),
+        Ok(data) => {
+            let total = data.total.unwrap_or(data.items.len() as i64);
+            set_items.set(data.items);
+            set_page.set(target_page);
+            set_total.set(total);
+            set_status.set(format!("{total} {label}"));
+        },
+        Err(err) => { set_status.set(err); },
+    };
+}
+
+pub(crate) fn spawn_detail_load<T>(
+    url: String,
+    set_detail: WriteSignal<Option<T>>,
+    set_status: WriteSignal<String>,
+) where
+    T: DeserializeOwned + Send + Sync + 'static,
+{
+    spawn_result! {
+        api_get::<T>(&url),
+        Ok(data) => { set_detail.set(Some(data)); },
+        Err(err) => { set_status.set(err); },
+    };
+}
+
+pub(crate) fn spawn_like_patch<T>(
+    url: String,
+    liked: bool,
+    set_detail: WriteSignal<Option<T>>,
+    set_status: WriteSignal<String>,
+) where
+    T: DeserializeOwned + Send + Sync + 'static,
+{
+    spawn_result! {
+        api_patch_json::<T, _>(&url, &easy_musiclib_shared::LikePatch { liked }),
+        Ok(updated) => { set_detail.set(Some(updated)); },
+        Err(err) => { set_status.set(err); },
+    };
+}
+
+pub(crate) fn spawn_json_status<T>(
+    future: impl std::future::Future<Output = Result<T, String>> + 'static,
+    set_status: WriteSignal<String>,
+) where
+    T: Serialize + 'static,
+{
+    spawn_result! {
+        future,
+        Ok(data) => { set_status.set(pretty_json(&data)); },
+        Err(err) => { set_status.set(err); },
+    };
+}
+
+pub(crate) fn spawn_text_status<T>(
+    future: impl std::future::Future<Output = Result<T, String>> + 'static,
+    set_status: WriteSignal<String>,
+    success: &'static str,
+) where
+    T: 'static,
+{
+    spawn_result! {
+        future,
+        Ok(_) => { set_status.set(String::from(success)); },
+        Err(err) => { set_status.set(err); },
+    };
+}
+
+pub(crate) fn spawn_settings_load(
+    set_browser_playback_format: WriteSignal<easy_musiclib_shared::BrowserPlaybackFormat>,
+    set_settings_status: WriteSignal<String>,
+) {
+    spawn_result! {
+        api_get::<easy_musiclib_shared::AppSettings>("/api/settings"),
+        Ok(settings) => {
+            set_browser_playback_format.set(settings.browser_playback_format);
+            set_settings_status.set(String::from("Settings loaded"));
+        },
+        Err(err) => { set_settings_status.set(err); },
+    };
+}
+
+pub(crate) fn spawn_settings_format_load(
+    set_browser_playback_format: WriteSignal<easy_musiclib_shared::BrowserPlaybackFormat>,
+) {
+    spawn_async! {
+        if let Ok(settings) = api_get::<easy_musiclib_shared::AppSettings>("/api/settings").await {
+            set_browser_playback_format.set(settings.browser_playback_format);
         }
-    });
+    };
 }
 
 pub(crate) fn start_scan_poll(job_id: Id, set_scan_status: WriteSignal<String>) {
@@ -40,7 +120,7 @@ pub(crate) fn start_scan_poll(job_id: Id, set_scan_status: WriteSignal<String>) 
     let interval_for_callback = interval_id.clone();
     let closure = Closure::<dyn FnMut()>::wrap(Box::new(move || {
         let interval_for_callback = interval_for_callback.clone();
-        wasm_bindgen_futures::spawn_local(async move {
+        spawn_async! {
             match api_get::<ScanJobStatus>(&format!("/api/scan-jobs/{job_id}")).await {
                 Ok(status) => {
                     let done = matches!(status.status.as_str(), "completed" | "failed");
@@ -53,7 +133,7 @@ pub(crate) fn start_scan_poll(job_id: Id, set_scan_status: WriteSignal<String>) 
                 }
                 Err(err) => set_scan_status.set(err),
             }
-        });
+        };
     }));
     if let Ok(handle) = window.set_interval_with_callback_and_timeout_and_arguments_0(
         closure.as_ref().unchecked_ref(),

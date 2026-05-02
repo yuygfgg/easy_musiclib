@@ -4,6 +4,7 @@ use crate::pages::{
 use crate::player::Player;
 use crate::route::{Page, read_current_page, write_history};
 use crate::util::nav_class;
+use easy_musiclib_macros::match_any_view;
 use easy_musiclib_shared::TrackSummary;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
@@ -141,15 +142,15 @@ pub(crate) fn App() -> impl IntoView {
                 </form>
             </aside>
             <section class="app-content">
-                {move || match page.get() {
-                    Page::Liked => view! { <LikedPage /> }.into_any(),
-                    Page::Search { q } => view! { <SearchPage initial_query=q /> }.into_any(),
-                    Page::Album { id } => view! { <AlbumPage id=id /> }.into_any(),
-                    Page::Artist { id } => view! { <ArtistPage id=id /> }.into_any(),
-                    Page::Event { id } => view! { <EventPage id=id /> }.into_any(),
-                    Page::Relation { artist_id } => view! { <RelationPage artist_id=artist_id /> }.into_any(),
-                    Page::Settings => view! { <SettingsPage /> }.into_any(),
-                }}
+                {move || match_any_view!(page.get(), {
+                    Page::Liked => view! { <LikedPage /> },
+                    Page::Search { q } => view! { <SearchPage initial_query=q /> },
+                    Page::Album { id } => view! { <AlbumPage id=id /> },
+                    Page::Artist { id } => view! { <ArtistPage id=id /> },
+                    Page::Event { id } => view! { <EventPage id=id /> },
+                    Page::Relation { artist_id } => view! { <RelationPage artist_id=artist_id /> },
+                    Page::Settings => view! { <SettingsPage /> },
+                })}
             </section>
             <Player />
         </main>

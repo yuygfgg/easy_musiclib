@@ -1,6 +1,7 @@
+use easy_musiclib_macros::{js_function, js_get, js_set};
 use easy_musiclib_shared::{Id, TrackSummary};
 use std::rc::Rc;
-use wasm_bindgen::{JsCast, JsValue, prelude::Closure};
+use wasm_bindgen::{JsValue, prelude::Closure};
 
 pub(crate) fn update_media_session(track: &TrackSummary, title_override: Option<&str>) {
     let Some(session) = browser_media_session() else {
@@ -19,10 +20,7 @@ pub(crate) fn update_media_position_state(position: f64, duration: f64, playback
     let Some(session) = browser_media_session() else {
         return;
     };
-    let Ok(set_position_state) =
-        js_sys::Reflect::get(&session, &JsValue::from_str("setPositionState"))
-            .and_then(|value| value.dyn_into::<js_sys::Function>())
-    else {
+    let Ok(set_position_state) = js_function!(&session, "setPositionState") else {
         return;
     };
     let state = js_sys::Object::new();
@@ -55,10 +53,7 @@ pub(crate) fn install_media_seek_handlers(
     let Some(session) = browser_media_session() else {
         return;
     };
-    let Ok(set_action_handler) =
-        js_sys::Reflect::get(&session, &JsValue::from_str("setActionHandler"))
-            .and_then(|value| value.dyn_into::<js_sys::Function>())
-    else {
+    let Ok(set_action_handler) = js_function!(&session, "setActionHandler") else {
         return;
     };
 
@@ -111,10 +106,7 @@ pub(crate) fn install_media_track_handlers(
     let Some(session) = browser_media_session() else {
         return;
     };
-    let Ok(set_action_handler) =
-        js_sys::Reflect::get(&session, &JsValue::from_str("setActionHandler"))
-            .and_then(|value| value.dyn_into::<js_sys::Function>())
-    else {
+    let Ok(set_action_handler) = js_function!(&session, "setActionHandler") else {
         return;
     };
 
@@ -146,7 +138,7 @@ pub(crate) fn install_media_track_handlers(
 }
 
 fn numeric_detail(details: &JsValue, key: &str) -> Option<f64> {
-    js_sys::Reflect::get(details, &JsValue::from_str(key))
+    js_get!(details, key)
         .ok()
         .and_then(|value| value.as_f64())
         .filter(|value| value.is_finite())
@@ -154,17 +146,14 @@ fn numeric_detail(details: &JsValue, key: &str) -> Option<f64> {
 
 fn browser_media_session() -> Option<JsValue> {
     let window = web_sys::window()?;
-    let navigator = js_sys::Reflect::get(window.as_ref(), &JsValue::from_str("navigator")).ok()?;
-    let session = js_sys::Reflect::get(&navigator, &JsValue::from_str("mediaSession")).ok()?;
+    let navigator = js_get!(window.as_ref(), "navigator").ok()?;
+    let session = js_get!(&navigator, "mediaSession").ok()?;
     (!session.is_undefined() && !session.is_null()).then_some(session)
 }
 
 fn media_metadata(track: &TrackSummary, title_override: Option<&str>) -> Option<JsValue> {
     let window = web_sys::window()?;
-    let constructor = js_sys::Reflect::get(window.as_ref(), &JsValue::from_str("MediaMetadata"))
-        .ok()?
-        .dyn_into::<js_sys::Function>()
-        .ok()?;
+    let constructor = js_function!(window.as_ref(), "MediaMetadata").ok()?;
     let init = js_sys::Object::new();
     set_js_property(
         init.as_ref(),
@@ -223,7 +212,7 @@ fn artwork_array(artwork_id: Id) -> js_sys::Array {
 }
 
 fn set_js_property(target: &JsValue, key: &str, value: &JsValue) {
-    let _ = js_sys::Reflect::set(target, &JsValue::from_str(key), value);
+    let _ = js_set!(target, key, value);
 }
 pub(crate) fn js_error_text(value: JsValue) -> String {
     let name = js_string_property(&value, "name");
@@ -250,17 +239,14 @@ pub(crate) fn js_error_text(value: JsValue) -> String {
 }
 
 fn js_string_property(value: &JsValue, key: &str) -> Option<String> {
-    js_sys::Reflect::get(value, &JsValue::from_str(key))
+    js_get!(value, key)
         .ok()
         .and_then(|value| value.as_string())
         .filter(|value| !value.is_empty())
 }
 
 fn js_to_string(value: &JsValue) -> Option<String> {
-    let function = js_sys::Reflect::get(value, &JsValue::from_str("toString"))
-        .ok()?
-        .dyn_into::<js_sys::Function>()
-        .ok()?;
+    let function = js_function!(value, "toString").ok()?;
     function
         .call0(value)
         .ok()

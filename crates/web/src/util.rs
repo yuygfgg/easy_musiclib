@@ -1,4 +1,4 @@
-use easy_musiclib_shared::TrackSummary;
+use easy_musiclib_shared::{AlbumSummary, TrackSummary};
 use serde::Serialize;
 
 pub(crate) const PAGE_SIZE: i64 = 100;
@@ -30,6 +30,14 @@ pub(crate) fn album_date(date: &Option<String>, year: Option<i64>) -> String {
     date.clone()
         .or_else(|| year.map(|value| value.to_string()))
         .unwrap_or_default()
+}
+
+pub(crate) fn album_counts(album: &AlbumSummary) -> String {
+    if album.disc_count > 1 {
+        format!("{} discs · {} tracks", album.disc_count, album.song_count)
+    } else {
+        format!("{} tracks", album.song_count)
+    }
 }
 
 pub(crate) fn format_time(seconds: f64) -> String {

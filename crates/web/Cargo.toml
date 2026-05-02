@@ -9,6 +9,7 @@ rust-version.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+easy_musiclib_macros = { path = "../macros" }
 easy_musiclib_shared = { path = "../shared" }
 gloo-net.workspace = true
 js-sys.workspace = true
