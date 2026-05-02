@@ -1,4 +1,5 @@
 use crate::api::api_get;
+use easy_musiclib_macros::spawn_async;
 use easy_musiclib_shared::{AppSettings, BrowserPlaybackFormat, TrackSummary};
 use gloo_net::http::Request;
 use std::cell::{Cell, RefCell};
@@ -38,7 +39,7 @@ pub(crate) fn spawn_hls_page_prefetch(tracks: Vec<TrackSummary>) {
     }
 
     let epoch = next_prefetch_epoch();
-    wasm_bindgen_futures::spawn_local(async move {
+    spawn_async! {
         let Ok(settings) = api_get::<AppSettings>("/api/settings").await else {
             return;
         };
@@ -49,7 +50,7 @@ pub(crate) fn spawn_hls_page_prefetch(tracks: Vec<TrackSummary>) {
             return;
         }
         prefetch_hls_track_ids(hls_page_prefetch_track_ids(&tracks), epoch);
-    });
+    };
 }
 
 pub(crate) fn prefetch_hls_playlist_tracks(
@@ -103,7 +104,7 @@ fn prefetch_hls_track_ids(track_ids: Vec<i64>, epoch: u64) {
     if pending.is_empty() {
         return;
     }
-    wasm_bindgen_futures::spawn_local(async move {
+    spawn_async! {
         for track_id in pending {
             if !is_active_prefetch_epoch(epoch) {
                 break;
@@ -117,7 +118,7 @@ fn prefetch_hls_track_ids(track_ids: Vec<i64>, epoch: u64) {
             }
             prefetch_hls_start(track_id, epoch).await;
         }
-    });
+    };
 }
 
 fn is_active_prefetch_epoch(epoch: u64) -> bool {

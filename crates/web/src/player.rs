@@ -1,4 +1,4 @@
-use crate::api::{api_get, api_patch_json};
+use crate::api::{api_get, api_patch_json, spawn_settings_format_load};
 use crate::app::{AppContext, PlayRequest};
 use crate::hls_prefetch::{audio_supports_flac_hls, hls_url, prefetch_hls_playlist_tracks};
 use crate::lyrics::{
@@ -12,8 +12,9 @@ use crate::media_session::{
 use crate::route::Page;
 use crate::ui::{ArtistInlineLinks, EntityLink};
 use crate::util::{format_time, progress_value};
+use easy_musiclib_macros::{js_get, match_any_view, spawn_async, spawn_result};
 use easy_musiclib_shared::{
-    AppSettings, BrowserPlaybackFormat, LikePatch, LyricsCandidate, TrackDetail, TrackSummary,
+    BrowserPlaybackFormat, LikePatch, LyricsCandidate, TrackDetail, TrackSummary,
 };
 use leptos::prelude::*;
 use std::rc::Rc;
@@ -58,11 +59,7 @@ pub(crate) fn Player() -> impl IntoView {
     };
 
     Effect::new(move |_| {
-        wasm_bindgen_futures::spawn_local(async move {
-            if let Ok(settings) = api_get::<AppSettings>("/api/settings").await {
-                set_browser_playback_format.set(settings.browser_playback_format);
-            }
-        });
+        spawn_settings_format_load(set_browser_playback_format);
     });
 
     Effect::new(move |_| {
@@ -187,12 +184,12 @@ pub(crate) fn Player() -> impl IntoView {
                         Ok(promise) => {
                             let set_status = ctx.set_status;
                             let title = track.title.clone();
-                            wasm_bindgen_futures::spawn_local(async move {
+                            spawn_async! {
                                 match JsFuture::from(promise).await {
                                     Ok(_) => set_status.set(format!("Playing {title}")),
                                     Err(err) => set_status.set(js_error_text(err)),
                                 }
-                            });
+                            };
                         }
                         Err(err) => ctx.set_status.set(js_error_text(err)),
                     }
@@ -217,12 +214,12 @@ pub(crate) fn Player() -> impl IntoView {
                     Ok(promise) => {
                         let set_status = ctx.set_status;
                         let title = track.title.clone();
-                        wasm_bindgen_futures::spawn_local(async move {
+                        spawn_async! {
                             match JsFuture::from(promise).await {
                                 Ok(_) => set_status.set(format!("Playing {title}")),
                                 Err(err) => set_status.set(js_error_text(err)),
                             }
-                        });
+                        };
                     }
                     Err(err) => ctx.set_status.set(js_error_text(err)),
                 }
@@ -308,11 +305,11 @@ pub(crate) fn Player() -> impl IntoView {
             match audio.play() {
                 Ok(promise) => {
                     let set_status = ctx.set_status;
-                    wasm_bindgen_futures::spawn_local(async move {
+                    spawn_async! {
                         if let Err(err) = JsFuture::from(promise).await {
                             set_status.set(js_error_text(err));
                         }
-                    });
+                    };
                 }
                 Err(err) => ctx.set_status.set(js_error_text(err)),
             }
@@ -326,21 +323,15 @@ pub(crate) fn Player() -> impl IntoView {
             return;
         };
         let liked = track.liked_at.is_none();
-        wasm_bindgen_futures::spawn_local(async move {
-            match api_patch_json::<TrackDetail, _>(
-                &format!("/api/tracks/{}", track.id),
-                &LikePatch { liked },
-            )
-            .await
-            {
-                Ok(updated) => {
-                    let summary = updated.summary;
-                    ctx.set_current_track.set(Some(summary.clone()));
-                    ctx.set_track_update.set(Some(summary));
-                }
-                Err(err) => ctx.set_status.set(err),
-            }
-        });
+        spawn_result! {
+            api_patch_json::<TrackDetail, _>(&format!("/api/tracks/{}", track.id), &LikePatch { liked }),
+            Ok(updated) => {
+                let summary = updated.summary;
+                ctx.set_current_track.set(Some(summary.clone()));
+                ctx.set_track_update.set(Some(summary));
+            },
+            Err(err) => { ctx.set_status.set(err); },
+        };
     };
 
     let open_lyrics_selection = move |_| {
@@ -514,9 +505,8 @@ pub(crate) fn Player() -> impl IntoView {
                     <button type="button" on:click=open_lyrics_selection>"Settings"</button>
                 </div>
                 <div class="lyrics-content" node_ref=lyrics_content_ref>
-                    {move || {
-                        if lyrics_loaded.get() && !lyrics_lines.get().is_empty() {
-                            view! {
+                    {move || match_any_view!(lyrics_loaded.get() && !lyrics_lines.get().is_empty(), {
+                        true => view! {
                                 <For
                                     each=move || { lyrics_lines.get().into_iter().enumerate().collect::<Vec<_>>() }
                                     key=|(index, line)| (*index, line.time_ms)
@@ -534,11 +524,9 @@ pub(crate) fn Player() -> impl IntoView {
                                         </div>
                                     }
                                 />
-                            }.into_any()
-                        } else {
-                            view! { <p>{lyrics_text.get()}</p> }.into_any()
-                        }
-                    }}
+                            },
+                        false => view! { <p>{lyrics_text.get()}</p> },
+                    })}
                 </div>
             </div>
         </section>
@@ -552,14 +540,13 @@ pub(crate) fn Player() -> impl IntoView {
                 </div>
             </div>
             <div class="lyrics-options">
-                {move || {
+                {move || match_any_view!(lyrics_candidates.get().is_empty(), {
+                    true => view! { <p class="empty">"Lyrics not found"</p> },
+                    false => {
                     let candidates = lyrics_candidates.get();
-                    if candidates.is_empty() {
-                        view! { <p class="empty">"Lyrics not found"</p> }.into_any()
-                    } else {
                         view! {
                             <For
-                                each=move || lyrics_candidates.get()
+                                each=move || candidates.clone()
                                 key=|candidate| format!("{}:{}:{}", candidate.provider, candidate.title, candidate.score)
                                 children=move |candidate| {
                                     let lyrics = candidate.lyrics.clone();
@@ -589,9 +576,9 @@ pub(crate) fn Player() -> impl IntoView {
                                     }
                                 }
                             />
-                        }.into_any()
-                    }
-                }}
+                        }
+                    },
+                })}
             </div>
         </section>
     }
@@ -674,12 +661,12 @@ fn navigator_number_property(name: &str) -> f64 {
 
 fn navigator_property(name: &str) -> Option<JsValue> {
     let window = web_sys::window()?;
-    let navigator = js_sys::Reflect::get(window.as_ref(), &JsValue::from_str("navigator")).ok()?;
-    js_sys::Reflect::get(&navigator, &JsValue::from_str(name)).ok()
+    let navigator = js_get!(window.as_ref(), "navigator").ok()?;
+    js_get!(&navigator, name).ok()
 }
 
 fn audio_error_text(audio: &web_sys::HtmlAudioElement) -> String {
-    let error = js_sys::Reflect::get(audio.as_ref(), &JsValue::from_str("error"))
+    let error = js_get!(audio.as_ref(), "error")
         .ok()
         .filter(|value| !value.is_null() && !value.is_undefined());
     let code = error
@@ -718,13 +705,11 @@ fn audio_error_text(audio: &web_sys::HtmlAudioElement) -> String {
 }
 
 fn js_string_property(value: &JsValue, key: &str) -> Option<String> {
-    js_sys::Reflect::get(value, &JsValue::from_str(key))
-        .ok()
-        .and_then(|value| value.as_string())
+    js_get!(value, key).ok().and_then(|value| value.as_string())
 }
 
 fn js_number_property(value: &JsValue, key: &str) -> Option<f64> {
-    js_sys::Reflect::get(value, &JsValue::from_str(key))
+    js_get!(value, key)
         .ok()
         .and_then(|value| value.as_f64())
         .filter(|value| value.is_finite())
@@ -799,7 +784,7 @@ fn start_track_playback<F, R>(
         return;
     }
 
-    wasm_bindgen_futures::spawn_local(async move {
+    spawn_async! {
         let track = match api_get::<TrackDetail>(&format!("/api/tracks/{}", track.id)).await {
             Ok(detail) => detail.summary,
             Err(err) => {
@@ -808,5 +793,5 @@ fn start_track_playback<F, R>(
             }
         };
         begin(track);
-    });
+    };
 }

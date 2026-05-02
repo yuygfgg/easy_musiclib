@@ -1,4 +1,5 @@
 use crate::api::api_get;
+use easy_musiclib_macros::spawn_result;
 use easy_musiclib_shared::{LyricsCandidate, TrackSummary};
 use leptos::prelude::*;
 use std::collections::BTreeMap;
@@ -34,35 +35,32 @@ pub(crate) fn load_lyrics_for_track(
         return;
     }
     set_text.set(String::from("Loading..."));
-    wasm_bindgen_futures::spawn_local(async move {
-        match api_get::<Vec<LyricsCandidate>>(&format!("/api/lyrics/search?track_id={}", track.id))
-            .await
-        {
-            Ok(candidates) => {
-                set_candidates.set(candidates.clone());
-                if let Some(first) = candidates.first() {
-                    apply_lyrics_text(
-                        &first.lyrics,
-                        true,
-                        Some(&track),
-                        set_lines,
-                        set_text,
-                        set_loaded,
-                    );
-                } else {
-                    set_lines.set(Vec::new());
-                    set_loaded.set(false);
-                    set_text.set(String::from("Lyrics not found"));
-                }
-            }
-            Err(err) => {
+    spawn_result! {
+        api_get::<Vec<LyricsCandidate>>(&format!("/api/lyrics/search?track_id={}", track.id)),
+        Ok(candidates) => {
+            set_candidates.set(candidates.clone());
+            if let Some(first) = candidates.first() {
+                apply_lyrics_text(
+                    &first.lyrics,
+                    true,
+                    Some(&track),
+                    set_lines,
+                    set_text,
+                    set_loaded,
+                );
+            } else {
                 set_lines.set(Vec::new());
                 set_loaded.set(false);
                 set_text.set(String::from("Lyrics not found"));
-                set_status.set(err);
             }
-        }
-    });
+        },
+        Err(err) => {
+            set_lines.set(Vec::new());
+            set_loaded.set(false);
+            set_text.set(String::from("Lyrics not found"));
+            set_status.set(err);
+        },
+    };
 }
 
 pub(crate) fn apply_lyrics_text(

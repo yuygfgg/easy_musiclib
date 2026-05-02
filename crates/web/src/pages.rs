@@ -1,5 +1,6 @@
 use crate::api::{
-    api_get, api_patch_json, api_post_json, list_url, spawn_list_load, start_scan_poll,
+    api_get, api_patch_json, api_post_json, list_url, spawn_detail_load, spawn_json_status,
+    spawn_like_patch, spawn_list_load, spawn_settings_load, spawn_text_status, start_scan_poll,
 };
 use crate::app::AppContext;
 use crate::route::Page;
@@ -8,10 +9,11 @@ use crate::ui::{
     RelationGraphView, TrackList,
 };
 use crate::util::{album_date, paged_status, pretty_json};
+use easy_musiclib_macros::{match_any_view, spawn_result};
 use easy_musiclib_shared::{
     AlbumDetail, AlbumSummary, AliasCsvImportRequest, AppSettings, ArtistDetail, ArtistSummary,
     BrowserPlaybackFormat, CreateArtistRequest, EventDetail, EventSummary, HlsCacheClearResponse,
-    LikePatch, MergeArtistsRequest, RelationGraph, ScanJobRequest, ScanJobStatus, TrackSummary,
+    MergeArtistsRequest, RelationGraph, ScanJobRequest, ScanJobStatus, TrackSummary,
     UpdateAppSettingsRequest,
 };
 use leptos::prelude::*;
@@ -96,12 +98,12 @@ pub(crate) fn LikedPage() -> impl IntoView {
                 </div>
             </header>
             <Pager page=page total=total on_page=Callback::new(move |next| load(kind.get_untracked(), next)) />
-            {move || match kind.get() {
-                EntityKind::Tracks => view! { <TrackList tracks=tracks.into() /> }.into_any(),
-                EntityKind::Albums => view! { <AlbumList albums=albums.into() /> }.into_any(),
-                EntityKind::Artists => view! { <ArtistList artists=artists.into() /> }.into_any(),
-                EntityKind::Events => view! { <EventList events=events.into() /> }.into_any(),
-            }}
+            {move || match_any_view!(kind.get(), {
+                EntityKind::Tracks => view! { <TrackList tracks=tracks.into() /> },
+                EntityKind::Albums => view! { <AlbumList albums=albums.into() /> },
+                EntityKind::Artists => view! { <ArtistList artists=artists.into() /> },
+                EntityKind::Events => view! { <EventList events=events.into() /> },
+            })}
         </section>
     }
 }
@@ -300,13 +302,11 @@ pub(crate) fn AlbumPage(id: String) -> impl IntoView {
     Effect::new({
         let id = id.clone();
         move |_| {
-            let id = id.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                match api_get::<AlbumDetail>(&format!("/api/albums/{id}")).await {
-                    Ok(data) => set_detail.set(Some(data)),
-                    Err(err) => set_status.set(err),
-                }
-            });
+            spawn_detail_load(
+                format!("/api/albums/{}", id.clone()),
+                set_detail,
+                set_status,
+            );
         }
     });
 
@@ -314,23 +314,18 @@ pub(crate) fn AlbumPage(id: String) -> impl IntoView {
     let toggle_like = move |_| {
         if let Some(album) = detail.get_untracked() {
             let liked = album.summary.liked_at.is_none();
-            wasm_bindgen_futures::spawn_local(async move {
-                match api_patch_json::<AlbumDetail, _>(
-                    &format!("/api/albums/{}", album.summary.id),
-                    &LikePatch { liked },
-                )
-                .await
-                {
-                    Ok(updated) => set_detail.set(Some(updated)),
-                    Err(err) => ctx.set_status.set(err),
-                }
-            });
+            spawn_like_patch(
+                format!("/api/albums/{}", album.summary.id),
+                liked,
+                set_detail,
+                ctx.set_status,
+            );
         }
     };
 
     view! {
         <section class="page detail-page">
-            {move || match detail.get() {
+            {move || match_any_view!(detail.get(), {
                 Some(album) => {
                     let summary = album.summary.clone();
                     view! {
@@ -355,10 +350,10 @@ pub(crate) fn AlbumPage(id: String) -> impl IntoView {
                             <div class="section-header"><h3>"Tracks"</h3></div>
                             <TrackList tracks=tracks />
                         </>
-                    }.into_any()
-                }
-                None => view! { <p class="empty">{status.get()}</p> }.into_any(),
-            }}
+                    }
+                },
+                None => view! { <p class="empty">{status.get()}</p> },
+            })}
         </section>
     }
 }
@@ -409,13 +404,11 @@ pub(crate) fn ArtistPage(id: String) -> impl IntoView {
     Effect::new({
         let id = id.clone();
         move |_| {
-            let id = id.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                match api_get::<ArtistDetail>(&format!("/api/artists/{id}")).await {
-                    Ok(data) => set_detail.set(Some(data)),
-                    Err(err) => set_status.set(err),
-                }
-            });
+            spawn_detail_load(
+                format!("/api/artists/{}", id.clone()),
+                set_detail,
+                set_status,
+            );
             load_albums.run(1);
             load_tracks.run(1);
         }
@@ -424,23 +417,18 @@ pub(crate) fn ArtistPage(id: String) -> impl IntoView {
     let toggle_like = move |_| {
         if let Some(artist) = detail.get_untracked() {
             let liked = artist.summary.liked_at.is_none();
-            wasm_bindgen_futures::spawn_local(async move {
-                match api_patch_json::<ArtistDetail, _>(
-                    &format!("/api/artists/{}", artist.summary.id),
-                    &LikePatch { liked },
-                )
-                .await
-                {
-                    Ok(updated) => set_detail.set(Some(updated)),
-                    Err(err) => ctx.set_status.set(err),
-                }
-            });
+            spawn_like_patch(
+                format!("/api/artists/{}", artist.summary.id),
+                liked,
+                set_detail,
+                ctx.set_status,
+            );
         }
     };
 
     view! {
         <section class="page detail-page">
-            {move || match detail.get() {
+            {move || match_any_view!(detail.get(), {
                 Some(artist) => {
                     let summary = artist.summary.clone();
                     let relation_id = summary.id.to_string();
@@ -464,10 +452,10 @@ pub(crate) fn ArtistPage(id: String) -> impl IntoView {
                                 </div>
                             </section>
                         </>
-                    }.into_any()
-                }
-                None => view! { <p class="empty">{status.get()}</p> }.into_any(),
-            }}
+                    }
+                },
+                None => view! { <p class="empty">{status.get()}</p> },
+            })}
             <div class="section-header">
                 <h3>"Albums"</h3>
                 <span>{move || paged_status(album_status.get(), album_page.get(), album_total.get())}</span>
@@ -512,13 +500,11 @@ pub(crate) fn EventPage(id: String) -> impl IntoView {
     Effect::new({
         let id = id.clone();
         move |_| {
-            let id = id.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                match api_get::<EventDetail>(&format!("/api/events/{id}")).await {
-                    Ok(data) => set_detail.set(Some(data)),
-                    Err(err) => set_status.set(err),
-                }
-            });
+            spawn_detail_load(
+                format!("/api/events/{}", id.clone()),
+                set_detail,
+                set_status,
+            );
             load_albums.run(1);
         }
     });
@@ -526,23 +512,18 @@ pub(crate) fn EventPage(id: String) -> impl IntoView {
     let toggle_like = move |_| {
         if let Some(event) = detail.get_untracked() {
             let liked = event.summary.liked_at.is_none();
-            wasm_bindgen_futures::spawn_local(async move {
-                match api_patch_json::<EventDetail, _>(
-                    &format!("/api/events/{}", event.summary.id),
-                    &LikePatch { liked },
-                )
-                .await
-                {
-                    Ok(updated) => set_detail.set(Some(updated)),
-                    Err(err) => ctx.set_status.set(err),
-                }
-            });
+            spawn_like_patch(
+                format!("/api/events/{}", event.summary.id),
+                liked,
+                set_detail,
+                ctx.set_status,
+            );
         }
     };
 
     view! {
         <section class="page detail-page">
-            {move || match detail.get() {
+            {move || match_any_view!(detail.get(), {
                 Some(event) => {
                     let summary = event.summary.clone();
                     view! {
@@ -556,10 +537,10 @@ pub(crate) fn EventPage(id: String) -> impl IntoView {
                                 </button>
                             </section>
                         </>
-                    }.into_any()
-                }
-                None => view! { <p class="empty">{status.get()}</p> }.into_any(),
-            }}
+                    }
+                },
+                None => view! { <p class="empty">{status.get()}</p> },
+            })}
             <div class="section-header">
                 <h3>"Albums"</h3>
                 <span>{move || paged_status(album_status.get(), album_page.get(), album_total.get())}</span>
@@ -586,19 +567,18 @@ pub(crate) fn RelationPage(artist_id: Option<String>) -> impl IntoView {
             } else {
                 String::from("/api/relations?scope=all&limit_nodes=300")
             };
-            wasm_bindgen_futures::spawn_local(async move {
-                match api_get::<RelationGraph>(&url).await {
-                    Ok(data) => {
-                        set_status.set(format!(
-                            "{} nodes, {} edges",
-                            data.nodes.len(),
-                            data.edges.len()
-                        ));
-                        set_graph.set(Some(data));
-                    }
-                    Err(err) => set_status.set(err),
-                }
-            });
+            spawn_result! {
+                api_get::<RelationGraph>(&url),
+                Ok(data) => {
+                    set_status.set(format!(
+                        "{} nodes, {} edges",
+                        data.nodes.len(),
+                        data.edges.len()
+                    ));
+                    set_graph.set(Some(data));
+                },
+                Err(err) => { set_status.set(err); },
+            };
         }
     });
 
@@ -629,15 +609,7 @@ pub(crate) fn SettingsPage() -> impl IntoView {
         signal(BrowserPlaybackFormat::default());
 
     Effect::new(move |_| {
-        wasm_bindgen_futures::spawn_local(async move {
-            match api_get::<AppSettings>("/api/settings").await {
-                Ok(settings) => {
-                    set_browser_playback_format.set(settings.browser_playback_format);
-                    set_settings_status.set(String::from("Settings loaded"));
-                }
-                Err(err) => set_settings_status.set(err),
-            }
-        });
+        spawn_settings_load(set_browser_playback_format, set_settings_status);
     });
 
     let start_scan = move |_| {
@@ -646,32 +618,24 @@ pub(crate) fn SettingsPage() -> impl IntoView {
             set_scan_status.set(String::from("Scan root is required"));
             return;
         }
-        wasm_bindgen_futures::spawn_local(async move {
-            match api_post_json::<ScanJobStatus, _>(
-                "/api/scan-jobs",
-                &ScanJobRequest { roots: vec![root] },
-            )
-            .await
-            {
-                Ok(job) => {
-                    set_scan_status.set(pretty_json(&job));
-                    start_scan_poll(job.id, set_scan_status);
-                }
-                Err(err) => set_scan_status.set(err),
-            }
-        });
+        let req = ScanJobRequest { roots: vec![root] };
+        spawn_result! {
+            api_post_json::<ScanJobStatus, _>("/api/scan-jobs", &req),
+            Ok(job) => {
+                set_scan_status.set(pretty_json(&job));
+                start_scan_poll(job.id, set_scan_status);
+            },
+            Err(err) => { set_scan_status.set(err); },
+        };
     };
 
     let add_artist = move |_| {
         let name = artist_name.get_untracked().trim().to_string();
-        wasm_bindgen_futures::spawn_local(async move {
-            match api_post_json::<ArtistSummary, _>("/api/artists", &CreateArtistRequest { name })
-                .await
-            {
-                Ok(data) => set_settings_status.set(pretty_json(&data)),
-                Err(err) => set_settings_status.set(err),
-            }
-        });
+        let req = CreateArtistRequest { name };
+        spawn_json_status(
+            async move { api_post_json::<ArtistSummary, _>("/api/artists", &req).await },
+            set_settings_status,
+        );
     };
 
     let merge = move |_| {
@@ -680,39 +644,30 @@ pub(crate) fn SettingsPage() -> impl IntoView {
             source: source.get_untracked(),
             by_name: by_name.get_untracked(),
         };
-        wasm_bindgen_futures::spawn_local(async move {
-            match api_post_json::<serde_json::Value, _>("/api/artists/merge", &req).await {
-                Ok(data) => set_settings_status.set(pretty_json(&data)),
-                Err(err) => set_settings_status.set(err),
-            }
-        });
+        spawn_json_status(
+            async move { api_post_json::<serde_json::Value, _>("/api/artists/merge", &req).await },
+            set_settings_status,
+        );
     };
 
     let import_csv = move |_| {
         let req = AliasCsvImportRequest {
             csv: alias_csv.get_untracked(),
         };
-        wasm_bindgen_futures::spawn_local(async move {
-            match api_post_json::<serde_json::Value, _>("/api/artists/alias-csv-import", &req).await
-            {
-                Ok(data) => set_settings_status.set(pretty_json(&data)),
-                Err(err) => set_settings_status.set(err),
-            }
-        });
+        spawn_json_status(
+            async move {
+                api_post_json::<serde_json::Value, _>("/api/artists/alias-csv-import", &req).await
+            },
+            set_settings_status,
+        );
     };
 
     let auto_merge = move |_| {
-        wasm_bindgen_futures::spawn_local(async move {
-            match api_post_json::<serde_json::Value, _>(
-                "/api/artists/auto-merge",
-                &serde_json::json!({}),
-            )
-            .await
-            {
-                Ok(data) => set_settings_status.set(pretty_json(&data)),
-                Err(err) => set_settings_status.set(err),
-            }
-        });
+        let req = serde_json::json!({});
+        spawn_json_status(
+            async move { api_post_json::<serde_json::Value, _>("/api/artists/auto-merge", &req).await },
+            set_settings_status,
+        );
     };
 
     let save_playback = move |format: BrowserPlaybackFormat| {
@@ -721,29 +676,23 @@ pub(crate) fn SettingsPage() -> impl IntoView {
         let req = UpdateAppSettingsRequest {
             browser_playback_format: format,
         };
-        wasm_bindgen_futures::spawn_local(async move {
-            match api_patch_json::<AppSettings, _>("/api/settings", &req).await {
-                Ok(_) => set_settings_status.set(String::from("Playback saved")),
-                Err(err) => set_settings_status.set(err),
-            }
-        });
+        spawn_text_status(
+            async move { api_patch_json::<AppSettings, _>("/api/settings", &req).await },
+            set_settings_status,
+            "Playback saved",
+        );
     };
 
     let clear_hls_cache = move |_| {
         set_settings_status.set(String::from("Clearing HLS cache"));
-        wasm_bindgen_futures::spawn_local(async move {
-            match api_post_json::<HlsCacheClearResponse, _>(
-                "/api/cache/hls/clear",
-                &serde_json::json!({}),
-            )
-            .await
-            {
-                Ok(data) => {
-                    set_settings_status.set(format!("HLS cache cleared\n{}", pretty_json(&data)))
-                }
-                Err(err) => set_settings_status.set(err),
-            }
-        });
+        let req = serde_json::json!({});
+        spawn_result! {
+            api_post_json::<HlsCacheClearResponse, _>("/api/cache/hls/clear", &req),
+            Ok(data) => {
+                set_settings_status.set(format!("HLS cache cleared\n{}", pretty_json(&data)));
+            },
+            Err(err) => { set_settings_status.set(err); },
+        };
     };
 
     view! {

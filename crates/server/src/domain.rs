@@ -1,34 +1,6 @@
+use easy_musiclib_macros::id_type;
 use easy_musiclib_shared as api;
 use o2o::o2o;
-
-macro_rules! id_type {
-    ($name:ident) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-        pub struct $name(i64);
-
-        impl $name {
-            pub fn new(value: i64) -> Self {
-                Self(value)
-            }
-
-            pub fn raw(self) -> i64 {
-                self.0
-            }
-        }
-
-        impl From<i64> for $name {
-            fn from(value: i64) -> Self {
-                Self::new(value)
-            }
-        }
-
-        impl From<$name> for i64 {
-            fn from(value: $name) -> Self {
-                value.raw()
-            }
-        }
-    };
-}
 
 id_type!(EntityId);
 id_type!(TrackId);

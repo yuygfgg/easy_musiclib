@@ -8,6 +8,7 @@ use crate::relation_layout::{
 };
 use crate::route::Page;
 use crate::util::{album_date, playable_tracks, total_pages};
+use easy_musiclib_macros::{entity_list_component, js_function, js_get, spawn_result};
 use easy_musiclib_shared::{
     AlbumSummary, ArtistSummary, EntityRef, EventSummary, Id, LikePatch, RelationEdge,
     RelationGraph, RelationNode, TrackDetail, TrackSummary,
@@ -89,21 +90,15 @@ fn TrackItem(
     let toggle_like = move |ev: leptos::ev::MouseEvent| {
         ev.stop_propagation();
         let liked_next = !liked.get_untracked();
-        wasm_bindgen_futures::spawn_local(async move {
-            match api_patch_json::<TrackDetail, _>(
-                &format!("/api/tracks/{track_id}"),
-                &LikePatch { liked: liked_next },
-            )
-            .await
-            {
-                Ok(updated) => {
-                    let summary = updated.summary;
-                    set_liked.set(summary.liked_at.is_some());
-                    ctx.set_track_update.set(Some(summary));
-                }
-                Err(err) => ctx.set_status.set(err),
-            }
-        });
+        spawn_result! {
+            api_patch_json::<TrackDetail, _>(&format!("/api/tracks/{track_id}"), &LikePatch { liked: liked_next }),
+            Ok(updated) => {
+                let summary = updated.summary;
+                set_liked.set(summary.liked_at.is_some());
+                ctx.set_track_update.set(Some(summary));
+            },
+            Err(err) => { ctx.set_status.set(err); },
+        };
     };
 
     view! {
@@ -137,16 +132,11 @@ fn TrackItem(
     }
 }
 
-#[component]
-pub(crate) fn AlbumList(albums: Signal<Vec<AlbumSummary>>) -> impl IntoView {
-    view! {
-        <div class="entity-list">
-            <For
-                each=move || albums.get()
-                key=|album| album.id
-                children=move |album| view! { <AlbumCard album=album /> }
-            />
-        </div>
+entity_list_component! {
+    pub(crate) fn AlbumList(albums: AlbumSummary) {
+        class: "entity-list",
+        key: |album| album.id,
+        card: AlbumCard(album)
     }
 }
 
@@ -169,16 +159,11 @@ fn AlbumCard(album: AlbumSummary) -> impl IntoView {
     }
 }
 
-#[component]
-pub(crate) fn ArtistList(artists: Signal<Vec<ArtistSummary>>) -> impl IntoView {
-    view! {
-        <div class="entity-list">
-            <For
-                each=move || artists.get()
-                key=|artist| artist.id
-                children=move |artist| view! { <ArtistCard artist=artist /> }
-            />
-        </div>
+entity_list_component! {
+    pub(crate) fn ArtistList(artists: ArtistSummary) {
+        class: "entity-list",
+        key: |artist| artist.id,
+        card: ArtistCard(artist)
     }
 }
 
@@ -200,16 +185,11 @@ fn ArtistCard(artist: ArtistSummary) -> impl IntoView {
     }
 }
 
-#[component]
-pub(crate) fn EventList(events: Signal<Vec<EventSummary>>) -> impl IntoView {
-    view! {
-        <div class="entity-list">
-            <For
-                each=move || events.get()
-                key=|event| event.id
-                children=move |event| view! { <EventCard event=event /> }
-            />
-        </div>
+entity_list_component! {
+    pub(crate) fn EventList(events: EventSummary) {
+        class: "entity-list",
+        key: |event| event.id,
+        card: EventCard(event)
     }
 }
 
@@ -476,15 +456,12 @@ pub(crate) fn RelationGraphView(graph: RelationGraph) -> impl IntoView {
 }
 
 fn graph_event_position(ev: &leptos::ev::MouseEvent) -> Option<(f64, f64)> {
-    let target = js_sys::Reflect::get(ev.as_ref(), &JsValue::from_str("currentTarget")).ok()?;
+    let target = js_get!(ev.as_ref(), "currentTarget").ok()?;
     if target.is_null() || target.is_undefined() {
         return None;
     }
 
-    let rect_fn = js_sys::Reflect::get(&target, &JsValue::from_str("getBoundingClientRect"))
-        .ok()?
-        .dyn_into::<js_sys::Function>()
-        .ok()?;
+    let rect_fn = js_function!(&target, "getBoundingClientRect").ok()?;
     let rect = rect_fn.call0(&target).ok()?;
     let left = js_property_number(&rect, "left")?;
     let top = js_property_number(&rect, "top")?;
@@ -603,7 +580,5 @@ fn request_animation_frame(callback: &Closure<dyn FnMut()>) {
 }
 
 fn js_property_number(value: &JsValue, key: &str) -> Option<f64> {
-    js_sys::Reflect::get(value, &JsValue::from_str(key))
-        .ok()?
-        .as_f64()
+    js_get!(value, key).ok()?.as_f64()
 }
