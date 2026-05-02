@@ -1,5 +1,6 @@
 mod api;
 mod app;
+mod hls_prefetch;
 mod lyrics;
 mod media_session;
 mod pages;

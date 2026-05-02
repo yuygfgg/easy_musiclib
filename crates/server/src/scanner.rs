@@ -85,6 +85,7 @@ pub async fn run_scan(pool: &SqlitePool, job_id: i64, roots: Vec<String>) -> Res
             .await?;
     }
 
+    db::discard_unknown_events(pool).await?;
     db::repair_event_dates_and_artwork(pool).await?;
     db::rebuild_relations(pool).await?;
     db::auto_merge(pool).await.ok();
@@ -144,8 +145,11 @@ async fn write_audio_track(
     let artwork_id = artwork_for_tags(pool, media_file_id, &tags).await?;
     let artist_ids = ensure_artists(pool, &tags.artists, artwork_id).await?;
     let album_artist_ids = ensure_artists(pool, &tags.album_artists, artwork_id).await?;
-    let event_id =
-        db::ensure_event(pool, tags.event.as_deref(), tags.date.as_deref(), tags.year).await?;
+    let event_name = tags
+        .event
+        .as_deref()
+        .filter(|name| !db::is_unknown_event_name(name));
+    let event_id = db::ensure_event(pool, event_name, tags.date.as_deref(), tags.year).await?;
     let album_id = db::find_or_create_album(
         pool,
         &tags.album,
@@ -328,7 +332,11 @@ async fn process_cue(
     let album_artist_ids = ensure_artists(pool, &album_artist_names, artwork_id).await?;
     let date = sheet.date.as_deref().or(audio_tags.date.as_deref());
     let year = cue_year(&sheet).or(audio_tags.year);
-    let event_id = db::ensure_event(pool, audio_tags.event.as_deref(), date, year).await?;
+    let event_name = audio_tags
+        .event
+        .as_deref()
+        .filter(|name| !db::is_unknown_event_name(name));
+    let event_id = db::ensure_event(pool, event_name, date, year).await?;
     let album_id = db::find_or_create_album(
         pool,
         album_name,

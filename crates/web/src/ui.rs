@@ -1,5 +1,6 @@
 use crate::api::api_patch_json;
 use crate::app::{AppContext, PlayRequest};
+use crate::hls_prefetch::spawn_hls_page_prefetch;
 use crate::relation_layout::{
     GRAPH_VIEWBOX_HEIGHT, GRAPH_VIEWBOX_WIDTH, LayoutPosition, clamp_graph_position,
     layout_position, max_layout_shift, relation_graph_layout, relation_graph_layout_relax,
@@ -27,6 +28,10 @@ const RELAX_STOP_SHIFT: f64 = 0.18;
 
 #[component]
 pub(crate) fn TrackList(tracks: Signal<Vec<TrackSummary>>) -> impl IntoView {
+    Effect::new(move |_| {
+        spawn_hls_page_prefetch(tracks.get());
+    });
+
     view! {
         <div class="track-list">
             <For

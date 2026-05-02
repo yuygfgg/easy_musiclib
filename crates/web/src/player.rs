@@ -1,5 +1,6 @@
 use crate::api::{api_get, api_patch_json};
 use crate::app::{AppContext, PlayRequest};
+use crate::hls_prefetch::{audio_supports_flac_hls, hls_url, prefetch_hls_playlist_tracks};
 use crate::lyrics::{
     LyricLine, active_lyric_index, apply_lyrics_text, load_lyrics_for_track, storage_key,
     storage_set,
@@ -14,16 +15,10 @@ use crate::util::{format_time, progress_value};
 use easy_musiclib_shared::{
     AppSettings, BrowserPlaybackFormat, LikePatch, LyricsCandidate, TrackDetail, TrackSummary,
 };
-use gloo_net::http::Request;
 use leptos::prelude::*;
-use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
 use std::rc::Rc;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
-
-const HLS_PREFETCH_TRACK_LIMIT: usize = 16;
-const HLS_PREFETCH_SEGMENT_COUNT: usize = 3;
 
 #[component]
 pub(crate) fn Player() -> impl IntoView {
@@ -48,8 +43,6 @@ pub(crate) fn Player() -> impl IntoView {
     let (lyrics_loaded, set_lyrics_loaded) = signal(false);
     let (lyrics_candidates, set_lyrics_candidates) = signal(Vec::<LyricsCandidate>::new());
     let (active_line, set_active_line) = signal(-1_i64);
-    let hls_prefetch_epoch = Rc::new(Cell::new(0_u64));
-    let hls_prefetched_tracks = Rc::new(RefCell::new(HashSet::<i64>::new()));
 
     let reset_lyrics = move |track: Option<TrackSummary>| {
         set_lyrics_lines.set(Vec::new());
@@ -71,62 +64,23 @@ pub(crate) fn Player() -> impl IntoView {
         });
     });
 
-    {
-        let hls_prefetch_epoch = hls_prefetch_epoch.clone();
-        let hls_prefetched_tracks = hls_prefetched_tracks.clone();
-        Effect::new(move |_| {
-            let Some(audio) = audio_ref.get() else {
-                return;
-            };
-            if !should_use_flac_hls(&audio, browser_playback_format.get()) {
-                return;
-            }
-            if !playing.get() {
-                return;
-            }
-
-            let tracks = ctx.playlist.get();
-            let track_ids = hls_prefetch_track_ids(
-                &tracks,
-                ctx.playlist_index.get(),
-                ctx.current_track.get().map(|track| track.id),
-                HLS_PREFETCH_TRACK_LIMIT,
-            );
-            if track_ids.is_empty() {
-                return;
-            }
-
-            let pending = {
-                let prefetched = hls_prefetched_tracks.borrow();
-                track_ids
-                    .into_iter()
-                    .filter(|track_id| !prefetched.contains(track_id))
-                    .collect::<Vec<_>>()
-            };
-            if pending.is_empty() {
-                return;
-            }
-
-            let epoch = hls_prefetch_epoch.get().wrapping_add(1);
-            hls_prefetch_epoch.set(epoch);
-            let hls_prefetch_epoch = hls_prefetch_epoch.clone();
-            let hls_prefetched_tracks = hls_prefetched_tracks.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                for track_id in pending {
-                    if hls_prefetch_epoch.get() != epoch {
-                        break;
-                    }
-                    {
-                        let mut prefetched = hls_prefetched_tracks.borrow_mut();
-                        if !prefetched.insert(track_id) {
-                            continue;
-                        }
-                    }
-                    prefetch_hls_start(track_id, epoch, hls_prefetch_epoch.clone()).await;
-                }
-            });
-        });
-    }
+    Effect::new(move |_| {
+        let Some(audio) = audio_ref.get() else {
+            return;
+        };
+        if !audio_supports_flac_hls(&audio, browser_playback_format.get()) {
+            return;
+        }
+        if !playing.get() {
+            return;
+        }
+        let tracks = ctx.playlist.get();
+        prefetch_hls_playlist_tracks(
+            &tracks,
+            ctx.playlist_index.get(),
+            ctx.current_track.get().map(|track| track.id),
+        );
+    });
 
     let sync_lyrics = move || {
         let lines = lyrics_lines.get_untracked();
@@ -195,7 +149,7 @@ pub(crate) fn Player() -> impl IntoView {
         let position = clamp_position(position);
         if let Some(audio) = audio_ref.get() {
             let playback_format = browser_playback_format.get_untracked();
-            if should_use_flac_hls(&audio, playback_format) {
+            if audio_supports_flac_hls(&audio, playback_format) {
                 let url = hls_url(track.id);
                 let same_src = hls_playback.get_untracked() && audio.current_src().ends_with(&url);
                 set_hls_playback.set(true);
@@ -627,102 +581,6 @@ fn stream_url(track_id: i64, start_ms: i64) -> String {
         url.push_str("&buffered=true");
     }
     url
-}
-
-fn hls_url(track_id: i64) -> String {
-    hls_file_url(track_id, "playlist.m3u8")
-}
-
-fn hls_file_url(track_id: i64, file: &str) -> String {
-    format!("/api/tracks/{track_id}/hls/{file}")
-}
-
-async fn prefetch_hls_start(track_id: i64, epoch: u64, active_epoch: Rc<Cell<u64>>) {
-    let response = match Request::get(&hls_url(track_id)).send().await {
-        Ok(response) => response,
-        Err(_) => return,
-    };
-    if active_epoch.get() != epoch {
-        return;
-    }
-    let playlist = response.text().await.unwrap_or_default();
-
-    let mut urls = Vec::with_capacity(HLS_PREFETCH_SEGMENT_COUNT + 1);
-    urls.push(hls_file_url(track_id, "init.mp4"));
-    urls.extend(hls_playlist_segment_urls(
-        track_id,
-        &playlist,
-        HLS_PREFETCH_SEGMENT_COUNT,
-    ));
-
-    for url in urls {
-        if active_epoch.get() != epoch {
-            break;
-        }
-        let _ = Request::get(&url).send().await;
-    }
-}
-
-fn hls_playlist_segment_urls(track_id: i64, playlist: &str, limit: usize) -> Vec<String> {
-    playlist
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#') && line.ends_with(".m4s"))
-        .take(limit)
-        .map(|line| {
-            if line.contains("://") || line.starts_with('/') {
-                line.to_owned()
-            } else {
-                hls_file_url(track_id, line)
-            }
-        })
-        .collect()
-}
-
-fn hls_prefetch_track_ids(
-    tracks: &[TrackSummary],
-    playlist_index: i64,
-    current_track_id: Option<i64>,
-    limit: usize,
-) -> Vec<i64> {
-    if tracks.is_empty() || limit == 0 {
-        return Vec::new();
-    }
-
-    let active_index = usize::try_from(playlist_index)
-        .ok()
-        .filter(|index| *index < tracks.len());
-    let start = active_index
-        .map(|index| (index + 1) % tracks.len())
-        .unwrap_or(0);
-    let mut seen = HashSet::new();
-    let mut ids = Vec::new();
-    for offset in 0..tracks.len() {
-        let index = (start + offset) % tracks.len();
-        let track = &tracks[index];
-        if Some(index) == active_index || Some(track.id) == current_track_id {
-            continue;
-        }
-        if track.playable && seen.insert(track.id) {
-            ids.push(track.id);
-            if ids.len() >= limit {
-                break;
-            }
-        }
-    }
-    ids
-}
-
-fn should_use_flac_hls(audio: &web_sys::HtmlAudioElement, format: BrowserPlaybackFormat) -> bool {
-    if format != BrowserPlaybackFormat::Flac48k {
-        return false;
-    }
-    audio
-        .can_play_type("application/vnd.apple.mpegurl; codecs=\"fLaC\"")
-        .eq("probably")
-        || audio
-            .can_play_type("audio/mpegurl; codecs=\"fLaC\"")
-            .eq("probably")
 }
 
 fn stream_playback_mode(format: BrowserPlaybackFormat, buffered: bool) -> String {
