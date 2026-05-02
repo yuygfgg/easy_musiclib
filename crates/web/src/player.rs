@@ -21,6 +21,15 @@ use std::rc::Rc;
 use wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 use wasm_bindgen_futures::JsFuture;
 
+const HLS_START_DRIFT_TOLERANCE_SECONDS: f64 = 1.0;
+
+#[derive(Clone)]
+struct PendingHlsStart {
+    url: String,
+    position: f64,
+    autoplay: bool,
+}
+
 #[component]
 pub(crate) fn Player() -> impl IntoView {
     let ctx = expect_context::<AppContext>();
@@ -32,7 +41,7 @@ pub(crate) fn Player() -> impl IntoView {
     let (duration, set_duration) = signal(0.0_f64);
     let (stream_start_time, set_stream_start_time) = signal(0.0_f64);
     let (hls_playback, set_hls_playback) = signal(false);
-    let (pending_hls_seek, set_pending_hls_seek) = signal(None::<f64>);
+    let (pending_hls_start, set_pending_hls_start) = signal(None::<PendingHlsStart>);
     let (browser_playback_format, set_browser_playback_format) =
         signal(BrowserPlaybackFormat::default());
     let (playback_mode, set_playback_mode) = signal(String::from("Idle"));
@@ -171,13 +180,18 @@ pub(crate) fn Player() -> impl IntoView {
                 set_stream_start_time.set(0.0);
                 set_display_position(position);
                 if same_src {
-                    set_pending_hls_seek.set(None);
+                    set_pending_hls_start.set(None);
                     audio.set_current_time(position);
                 } else {
                     let _ = audio.pause();
                     audio.set_src(&url);
-                    set_pending_hls_seek.set(Some(position));
+                    set_pending_hls_start.set(Some(PendingHlsStart {
+                        url,
+                        position,
+                        autoplay,
+                    }));
                     audio.load();
+                    audio.set_current_time(position);
                 }
                 if autoplay {
                     match audio.play() {
@@ -197,7 +211,7 @@ pub(crate) fn Player() -> impl IntoView {
                 return;
             }
 
-            set_pending_hls_seek.set(None);
+            set_pending_hls_start.set(None);
             set_hls_playback.set(false);
             set_playback_mode.set(stream_playback_mode(
                 playback_format,
@@ -226,6 +240,32 @@ pub(crate) fn Player() -> impl IntoView {
             }
         }
     });
+
+    let apply_pending_hls_start = move |confirm_playback: bool| {
+        let Some(pending) = pending_hls_start.get_untracked() else {
+            return;
+        };
+        let Some(audio) = audio_ref.get() else {
+            return;
+        };
+        let current_src = audio.current_src();
+        if !current_src.is_empty() && !current_src.ends_with(&pending.url) {
+            set_pending_hls_start.set(None);
+            return;
+        }
+
+        let current = audio.current_time();
+        if hls_start_needs_seek(current, pending.position) {
+            audio.set_current_time(pending.position);
+            return;
+        }
+        if audio.seeking() {
+            return;
+        }
+        if !pending.autoplay || confirm_playback {
+            set_pending_hls_start.set(None);
+        }
+    };
 
     let media_seek_to = start_stream_at.clone();
     let media_seek_by = start_stream_at.clone();
@@ -302,6 +342,10 @@ pub(crate) fn Player() -> impl IntoView {
             return;
         }
         if audio.paused() {
+            if let Some(mut pending) = pending_hls_start.get_untracked() {
+                pending.autoplay = true;
+                set_pending_hls_start.set(Some(pending));
+            }
             match audio.play() {
                 Ok(promise) => {
                     let set_status = ctx.set_status;
@@ -455,6 +499,7 @@ pub(crate) fn Player() -> impl IntoView {
                 set_playing.set(true);
                 set_active_line.set(-2);
             }
+            on:playing=move |_| apply_pending_hls_start(false)
             on:pause=move |_| {
                 set_playing.set(false);
                 if let Some(track) = ctx.current_track.get_untracked() {
@@ -462,15 +507,15 @@ pub(crate) fn Player() -> impl IntoView {
                 }
             }
             on:loadedmetadata=move |_| {
-                if let Some(position) = pending_hls_seek.get_untracked() {
-                    if let Some(audio) = audio_ref.get() {
-                        audio.set_current_time(position);
-                    }
-                    set_pending_hls_seek.set(None);
-                }
+                apply_pending_hls_start(false);
                 update_audio_progress();
             }
-            on:timeupdate=move |_| update_audio_progress()
+            on:canplay=move |_| apply_pending_hls_start(false)
+            on:seeked=move |_| apply_pending_hls_start(false)
+            on:timeupdate=move |_| {
+                apply_pending_hls_start(true);
+                update_audio_progress();
+            }
             on:error=move |_| {
                 if let Some(audio) = audio_ref.get() {
                     ctx.set_status.set(audio_error_text(&audio));
@@ -612,6 +657,14 @@ fn stream_url(track_id: i64, start_ms: i64) -> String {
         url.push_str("&buffered=true");
     }
     url
+}
+
+fn hls_start_needs_seek(current: f64, target: f64) -> bool {
+    if !current.is_finite() || !target.is_finite() {
+        return false;
+    }
+    current > target + HLS_START_DRIFT_TOLERANCE_SECONDS
+        || current + HLS_START_DRIFT_TOLERANCE_SECONDS < target
 }
 
 fn stream_playback_mode(format: BrowserPlaybackFormat, buffered: bool) -> String {

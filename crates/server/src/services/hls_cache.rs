@@ -171,7 +171,7 @@ where
 pub async fn wait_for_hls_file(path: &Path, timeout: Duration) -> ApiResult<()> {
     let deadline = Instant::now() + timeout;
     loop {
-        if tokio::fs::metadata(path).await.is_ok() {
+        if hls_file_ready(path).await {
             return Ok(());
         }
         if Instant::now() >= deadline {
@@ -179,6 +179,57 @@ pub async fn wait_for_hls_file(path: &Path, timeout: Duration) -> ApiResult<()> 
         }
         sleep(Duration::from_millis(50)).await;
     }
+}
+
+pub async fn wait_for_hls_playlist_start(cache_dir: &Path, path: &Path) -> ApiResult<()> {
+    let deadline = Instant::now() + hls_file_timeout(HLS_PLAYLIST_FILE);
+    loop {
+        if let Ok(playlist) = tokio::fs::read_to_string(path).await {
+            if let Some(files) = hls_startup_files(&playlist) {
+                let init_ready = hls_file_ready(&cache_dir.join(&files.init_file)).await;
+                let segment_ready = hls_file_ready(&cache_dir.join(&files.segment_file)).await;
+                if init_ready && segment_ready {
+                    return Ok(());
+                }
+            }
+        }
+        if Instant::now() >= deadline {
+            return Err(AppError::not_found("HLS playlist is not ready"));
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+}
+
+async fn hls_file_ready(path: &Path) -> bool {
+    tokio::fs::metadata(path)
+        .await
+        .map(|metadata| metadata.is_file() && metadata.len() > 0)
+        .unwrap_or(false)
+}
+
+struct HlsStartupFiles {
+    init_file: String,
+    segment_file: String,
+}
+
+fn hls_startup_files(playlist: &str) -> Option<HlsStartupFiles> {
+    let init_file = playlist.lines().find_map(hls_map_uri)?.to_owned();
+    let segment_file = playlist
+        .lines()
+        .map(str::trim)
+        .find(|line| is_hls_segment_file(line))?
+        .to_owned();
+    Some(HlsStartupFiles {
+        init_file,
+        segment_file,
+    })
+}
+
+fn hls_map_uri(line: &str) -> Option<&str> {
+    let attrs = line.trim().strip_prefix("#EXT-X-MAP:")?;
+    let uri_start = attrs.find("URI=\"")? + "URI=\"".len();
+    let uri = &attrs[uri_start..];
+    uri.split('"').next().filter(|value| *value == HLS_INIT_FILE)
 }
 
 fn hls_cache_root() -> PathBuf {
@@ -315,5 +366,55 @@ mod tests {
         let playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-START:TIME-OFFSET=0.000,PRECISE=YES\n#EXT-X-PLAYLIST-TYPE:VOD\n";
 
         assert_eq!(hls_playlist_for_playback(playlist), playlist);
+    }
+
+    #[test]
+    fn hls_startup_files_requires_init_and_first_segment() {
+        let playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-MAP:URI=\"init.mp4\"\n";
+
+        assert!(hls_startup_files(playlist).is_none());
+    }
+
+    #[test]
+    fn hls_startup_files_parses_init_and_first_segment() {
+        let playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-MAP:BYTERANGE=\"12@0\",URI=\"init.mp4\"\n#EXTINF:2.000000,\nsegment_00000.m4s\n#EXTINF:2.000000,\nsegment_00001.m4s\n";
+
+        let files = hls_startup_files(playlist).expect("startup files");
+
+        assert_eq!(files.init_file, HLS_INIT_FILE);
+        assert_eq!(files.segment_file, "segment_00000.m4s");
+    }
+
+    #[tokio::test]
+    async fn wait_for_hls_playlist_start_waits_for_startup_media() {
+        let dir = tempfile::tempdir().unwrap();
+        let playlist_path = dir.path().join(HLS_PLAYLIST_FILE);
+        tokio::fs::write(
+            &playlist_path,
+            "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:2.000000,\nsegment_00000.m4s\n",
+        )
+        .await
+        .unwrap();
+
+        let wait = wait_for_hls_playlist_start(dir.path(), &playlist_path);
+        tokio::pin!(wait);
+
+        tokio::select! {
+            result = &mut wait => panic!("playlist became ready too early: {result:?}"),
+            _ = sleep(Duration::from_millis(120)) => {}
+        }
+
+        tokio::fs::write(dir.path().join(HLS_INIT_FILE), b"init")
+            .await
+            .unwrap();
+        tokio::select! {
+            result = &mut wait => panic!("playlist became ready without first segment: {result:?}"),
+            _ = sleep(Duration::from_millis(120)) => {}
+        }
+
+        tokio::fs::write(dir.path().join("segment_00000.m4s"), b"segment")
+            .await
+            .unwrap();
+        wait.await.unwrap();
     }
 }

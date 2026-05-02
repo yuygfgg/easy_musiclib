@@ -66,11 +66,12 @@ pub async fn stream_track_hls_file_response(
     let path = hls_cache::hls_file_path(&cache_dir, &file)?;
     hls_cache::ensure_hls_generation(state.services.playback_media.clone(), &source, &cache_dir)
         .await?;
-    hls_cache::wait_for_hls_file(&path, hls_cache::hls_file_timeout(&file)).await?;
     let mime = hls_file_mime(&file)?;
     if file == HLS_PLAYLIST_FILE {
+        hls_cache::wait_for_hls_playlist_start(&cache_dir, &path).await?;
         return hls_playlist_response(&path).await;
     }
+    hls_cache::wait_for_hls_file(&path, hls_cache::hls_file_timeout(&file)).await?;
     let mut response = ranged_file_response(&path, mime, None, &headers, false).await?;
     response
         .headers_mut()
