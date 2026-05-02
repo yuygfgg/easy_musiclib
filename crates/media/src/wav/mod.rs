@@ -1,7 +1,6 @@
-use crate::formats::{
-    AudioFormat, CueRenderQuality, CueTrackRenderer, WAV_SLICE_RENDERER, read_prefix,
-};
-use crate::render::RenderTags;
+use crate::cue_render::{CueTrackRenderer, WAV_SLICE_RENDERER};
+use crate::formats::{AudioFormat, read_prefix};
+use crate::render::{CueRenderQuality, RenderTags};
 use anyhow::{Context, Result, bail};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};

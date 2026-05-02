@@ -1,5 +1,3 @@
-use crate::formats::CueRenderQuality;
-
 #[derive(Debug, Clone)]
 pub struct RenderTags {
     pub title: String,
@@ -7,6 +5,12 @@ pub struct RenderTags {
     pub album: Option<String>,
     pub track_no: Option<i64>,
     pub date: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CueRenderQuality {
+    Lossless,
+    Lossy,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

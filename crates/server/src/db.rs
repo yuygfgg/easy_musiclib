@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
+use easy_musiclib_media::cue_render::is_playable_renderer;
 use easy_musiclib_media::extract_year;
-use easy_musiclib_media::formats::is_playable_renderer;
 use easy_musiclib_media::normalize::{fuzzy_score, normalize_name};
 use easy_musiclib_shared::*;
 use sqlx::sqlite::SqliteQueryResult;

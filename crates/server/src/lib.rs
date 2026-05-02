@@ -1,10 +1,12 @@
 pub mod app;
 pub mod db;
 pub mod handlers;
+pub mod http;
 pub mod import_old;
 pub mod lyrics;
 pub mod scanner;
 pub mod schema;
+pub mod services;
 
 use axum::Json;
 use axum::http::StatusCode;

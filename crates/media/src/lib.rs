@@ -1,14 +1,17 @@
 pub mod artists;
 pub mod cue;
+pub mod cue_render;
 mod encoding;
 mod ffmpeg_backend;
 mod flac;
 pub mod formats;
+pub mod metadata;
 mod mp3;
 pub mod normalize;
 pub mod providers;
 pub mod render;
 pub mod tags;
+pub mod transcode;
 mod wav;
 
 use sha2::{Digest, Sha256};

@@ -1,6 +1,7 @@
 use crate::db;
 use anyhow::{Context, Result};
-use easy_musiclib_media::formats::{PASSTHROUGH_RENDERER, format_by_extension};
+use easy_musiclib_media::cue_render::PASSTHROUGH_RENDERER;
+use easy_musiclib_media::formats::format_by_extension;
 use easy_musiclib_media::normalize::normalize_name;
 use easy_musiclib_media::path_hash;
 use serde_json::Value;

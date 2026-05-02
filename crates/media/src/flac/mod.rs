@@ -1,9 +1,8 @@
 mod split;
 
-use crate::formats::{
-    AudioFormat, CueRenderQuality, CueTrackRenderer, FLAC_TRACKSPLIT_RENDERER, read_prefix,
-};
-use crate::render::RenderTags;
+use crate::cue_render::{CueTrackRenderer, FLAC_TRACKSPLIT_RENDERER};
+use crate::formats::{AudioFormat, read_prefix};
+use crate::render::{CueRenderQuality, RenderTags};
 use anyhow::Result;
 use std::path::Path;
 

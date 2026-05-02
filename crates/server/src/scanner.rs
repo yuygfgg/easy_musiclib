@@ -1,9 +1,9 @@
 use crate::db;
 use anyhow::{Context, Result};
 use easy_musiclib_media::cue::{self, apply_audio_timing, cue_year, parse_cue_file};
-use easy_musiclib_media::formats::{
-    PASSTHROUGH_RENDERER, cue_renderer_id_for_format_id, format_by_extension, read_audio_metadata,
-};
+use easy_musiclib_media::cue_render::{PASSTHROUGH_RENDERER, cue_renderer_id_for_format_id};
+use easy_musiclib_media::formats::format_by_extension;
+use easy_musiclib_media::metadata::read_audio_metadata;
 use easy_musiclib_media::path_hash;
 use easy_musiclib_media::providers::{
     DiscoveredAudioFile, DiscoveredCueFile, discover_library_files,
