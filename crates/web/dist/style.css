@@ -110,6 +110,7 @@ button:disabled {
 .shell-search input,
 .toolbar input,
 .settings input,
+.settings select,
 .settings textarea,
 .pagination input {
   min-width: 0;
@@ -485,6 +486,16 @@ button:disabled {
 
 .checkbox-row input {
   width: auto;
+}
+
+.setting-field {
+  display: grid;
+  gap: 6px;
+  color: #4b5563;
+}
+
+.setting-field span {
+  font-size: 0.9rem;
 }
 
 .settings textarea {

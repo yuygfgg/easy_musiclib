@@ -78,6 +78,35 @@ async fn migrate_db(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    reset_legacy_playback_settings(pool).await?;
+
+    Ok(())
+}
+
+async fn reset_legacy_playback_settings(pool: &SqlitePool) -> Result<()> {
+    let marker = "__app_settings_reset_for_browser_playback_v1";
+    let reset_done = sqlx::query("SELECT 1 FROM app_settings WHERE key = ?")
+        .bind(marker)
+        .fetch_optional(pool)
+        .await?
+        .is_some();
+    if reset_done {
+        return Ok(());
+    }
+
+    let now = chrono::Utc::now().timestamp_millis();
+    sqlx::query("DELETE FROM app_settings")
+        .execute(pool)
+        .await?;
+    sqlx::query(
+        "INSERT INTO app_settings (key, value_json, updated_at)
+         VALUES (?, ?, ?)",
+    )
+    .bind(marker)
+    .bind("true")
+    .bind(now)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 

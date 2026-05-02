@@ -26,7 +26,11 @@ pub async fn clear_hls_cache() -> ApiResult<HlsCacheClearResponse> {
     Ok(summary)
 }
 
-pub async fn hls_cache_dir(track_id: TrackId, source: &PlaybackSource) -> ApiResult<PathBuf> {
+pub async fn hls_cache_dir(
+    track_id: TrackId,
+    source: &PlaybackSource,
+    flac_sample_rate: i64,
+) -> ApiResult<PathBuf> {
     let metadata = tokio::fs::metadata(&source.path).await?;
     let modified = metadata
         .modified()
@@ -35,7 +39,8 @@ pub async fn hls_cache_dir(track_id: TrackId, source: &PlaybackSource) -> ApiRes
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
     let mut hasher = Sha256::new();
-    hasher.update(b"flac-48k-fmp4-hls-v1");
+    hasher.update(b"flac-fmp4-hls-v2");
+    hasher.update(flac_sample_rate.to_le_bytes());
     hasher.update(track_id.raw().to_le_bytes());
     hasher.update(source.path.as_bytes());
     hasher.update(source.renderer.as_bytes());
@@ -103,6 +108,7 @@ pub async fn ensure_hls_generation<M>(
     playback_media: M,
     source: &PlaybackSource,
     cache_dir: &Path,
+    flac_sample_rate: i64,
 ) -> ApiResult<()>
 where
     M: PlaybackMedia + Clone + Send + Sync + 'static,
@@ -144,6 +150,7 @@ where
                     output_dir: cache_dir.clone(),
                     start_ms,
                     end_ms,
+                    flac_sample_rate: flac_sample_rate as u32,
                 })
                 .await?;
             tokio::fs::write(hls_complete_path(&cache_dir), b"ok")
@@ -229,7 +236,9 @@ fn hls_map_uri(line: &str) -> Option<&str> {
     let attrs = line.trim().strip_prefix("#EXT-X-MAP:")?;
     let uri_start = attrs.find("URI=\"")? + "URI=\"".len();
     let uri = &attrs[uri_start..];
-    uri.split('"').next().filter(|value| *value == HLS_INIT_FILE)
+    uri.split('"')
+        .next()
+        .filter(|value| *value == HLS_INIT_FILE)
 }
 
 fn hls_cache_root() -> PathBuf {

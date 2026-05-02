@@ -16,5 +16,5 @@ pub async fn update_settings(
     repository: &impl SettingsRepository,
     req: UpdateAppSettings,
 ) -> Result<AppSettings> {
-    repository.update_settings(req).await
+    repository.update_settings(req.normalized()).await
 }

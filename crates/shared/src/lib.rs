@@ -169,34 +169,107 @@ pub struct ScanJobStatus {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BrowserPlaybackFormat {
-    #[serde(rename = "opus_256k")]
-    Opus256k,
-    #[serde(rename = "flac_48k")]
-    Flac48k,
+    #[serde(rename = "opus")]
+    Opus,
+    #[serde(rename = "flac")]
+    Flac,
+}
+
+pub const DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE: i64 = 256_000;
+pub const BROWSER_PLAYBACK_OPUS_BITRATE_OPTIONS: [i64; 7] =
+    [64_000, 96_000, 128_000, 160_000, 192_000, 256_000, 320_000];
+pub const MIN_BROWSER_PLAYBACK_OPUS_BITRATE: i64 = 64_000;
+pub const MAX_BROWSER_PLAYBACK_OPUS_BITRATE: i64 = 320_000;
+pub const DEFAULT_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE: i64 = 48_000;
+pub const BROWSER_PLAYBACK_FLAC_SAMPLE_RATE_OPTIONS: [i64; 6] =
+    [44_100, 48_000, 88_200, 96_000, 176_400, 192_000];
+pub const MIN_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE: i64 = 44_100;
+pub const MAX_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE: i64 = 192_000;
+
+pub fn normalize_browser_playback_opus_bitrate(value: i64) -> i64 {
+    nearest_browser_playback_option(
+        value,
+        &BROWSER_PLAYBACK_OPUS_BITRATE_OPTIONS,
+        DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE,
+    )
+}
+
+pub fn normalize_browser_playback_flac_sample_rate(value: i64) -> i64 {
+    nearest_browser_playback_option(
+        value,
+        &BROWSER_PLAYBACK_FLAC_SAMPLE_RATE_OPTIONS,
+        DEFAULT_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE,
+    )
+}
+
+fn nearest_browser_playback_option(value: i64, options: &[i64], default: i64) -> i64 {
+    options
+        .iter()
+        .copied()
+        .min_by_key(|option| (i128::from(value) - i128::from(*option)).abs())
+        .unwrap_or(default)
 }
 
 impl Default for BrowserPlaybackFormat {
     fn default() -> Self {
-        Self::Opus256k
+        Self::Opus
+    }
+}
+
+fn default_browser_playback_opus_bitrate() -> i64 {
+    DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE
+}
+
+fn default_browser_playback_flac_sample_rate() -> i64 {
+    DEFAULT_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct BrowserPlaybackSettings {
+    #[serde(default)]
+    pub format: BrowserPlaybackFormat,
+    #[serde(default = "default_browser_playback_opus_bitrate")]
+    pub opus_bitrate: i64,
+    #[serde(default = "default_browser_playback_flac_sample_rate")]
+    pub flac_sample_rate: i64,
+}
+
+impl Default for BrowserPlaybackSettings {
+    fn default() -> Self {
+        Self {
+            format: BrowserPlaybackFormat::default(),
+            opus_bitrate: DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE,
+            flac_sample_rate: DEFAULT_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE,
+        }
+    }
+}
+
+impl BrowserPlaybackSettings {
+    pub fn normalized(mut self) -> Self {
+        self.opus_bitrate = normalize_browser_playback_opus_bitrate(self.opus_bitrate);
+        self.flac_sample_rate = normalize_browser_playback_flac_sample_rate(self.flac_sample_rate);
+        self
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
-    pub browser_playback_format: BrowserPlaybackFormat,
+    #[serde(default)]
+    pub browser_playback: BrowserPlaybackSettings,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            browser_playback_format: BrowserPlaybackFormat::default(),
+            browser_playback: BrowserPlaybackSettings::default(),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateAppSettingsRequest {
-    pub browser_playback_format: BrowserPlaybackFormat,
+    #[serde(default)]
+    pub browser_playback: BrowserPlaybackSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

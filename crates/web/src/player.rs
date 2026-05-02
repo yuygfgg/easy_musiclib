@@ -1,4 +1,4 @@
-use crate::api::{api_get, api_patch_json, spawn_settings_format_load};
+use crate::api::{api_get, api_patch_json, spawn_playback_settings_load};
 use crate::app::{AppContext, PlayRequest};
 use crate::hls_prefetch::{audio_supports_flac_hls, hls_url, prefetch_hls_playlist_tracks};
 use crate::lyrics::{
@@ -14,7 +14,8 @@ use crate::ui::{ArtistInlineLinks, EntityLink};
 use crate::util::{format_time, progress_value};
 use easy_musiclib_macros::{js_get, match_any_view, spawn_async, spawn_result};
 use easy_musiclib_shared::{
-    BrowserPlaybackFormat, LikePatch, LyricsCandidate, TrackDetail, TrackSummary,
+    BrowserPlaybackFormat, BrowserPlaybackSettings, LikePatch, LyricsCandidate, TrackDetail,
+    TrackSummary,
 };
 use leptos::prelude::*;
 use std::rc::Rc;
@@ -42,8 +43,7 @@ pub(crate) fn Player() -> impl IntoView {
     let (stream_start_time, set_stream_start_time) = signal(0.0_f64);
     let (hls_playback, set_hls_playback) = signal(false);
     let (pending_hls_start, set_pending_hls_start) = signal(None::<PendingHlsStart>);
-    let (browser_playback_format, set_browser_playback_format) =
-        signal(BrowserPlaybackFormat::default());
+    let (browser_playback, set_browser_playback) = signal(BrowserPlaybackSettings::default());
     let (playback_mode, set_playback_mode) = signal(String::from("Idle"));
     let (seek_value, set_seek_value) = signal(0_i64);
     let (seeking, set_seeking) = signal(false);
@@ -68,14 +68,14 @@ pub(crate) fn Player() -> impl IntoView {
     };
 
     Effect::new(move |_| {
-        spawn_settings_format_load(set_browser_playback_format);
+        spawn_playback_settings_load(set_browser_playback);
     });
 
     Effect::new(move |_| {
         let Some(audio) = audio_ref.get() else {
             return;
         };
-        if !audio_supports_flac_hls(&audio, browser_playback_format.get()) {
+        if !audio_supports_flac_hls(&audio, browser_playback.get()) {
             return;
         }
         if !playing.get() {
@@ -171,12 +171,12 @@ pub(crate) fn Player() -> impl IntoView {
         };
         let position = clamp_position(position);
         if let Some(audio) = audio_ref.get() {
-            let playback_format = browser_playback_format.get_untracked();
-            if audio_supports_flac_hls(&audio, playback_format) {
+            let playback = browser_playback.get_untracked();
+            if audio_supports_flac_hls(&audio, playback) {
                 let url = hls_url(track.id);
                 let same_src = hls_playback.get_untracked() && audio.current_src().ends_with(&url);
                 set_hls_playback.set(true);
-                set_playback_mode.set(String::from("FLAC HLS"));
+                set_playback_mode.set(format!("FLAC HLS {}Hz", playback.flac_sample_rate));
                 set_stream_start_time.set(0.0);
                 set_display_position(position);
                 if same_src {
@@ -214,7 +214,7 @@ pub(crate) fn Player() -> impl IntoView {
             set_pending_hls_start.set(None);
             set_hls_playback.set(false);
             set_playback_mode.set(stream_playback_mode(
-                playback_format,
+                playback,
                 needs_buffered_audio_response(),
             ));
             set_stream_start_time.set(position);
@@ -667,11 +667,15 @@ fn hls_start_needs_seek(current: f64, target: f64) -> bool {
         || current + HLS_START_DRIFT_TOLERANCE_SECONDS < target
 }
 
-fn stream_playback_mode(format: BrowserPlaybackFormat, buffered: bool) -> String {
+fn stream_playback_mode(playback: BrowserPlaybackSettings, buffered: bool) -> String {
     let transport = if buffered { "buffered" } else { "direct" };
-    match format {
-        BrowserPlaybackFormat::Opus256k => format!("{transport} Opus"),
-        BrowserPlaybackFormat::Flac48k => format!("{transport} FLAC"),
+    match playback.format {
+        BrowserPlaybackFormat::Opus => {
+            format!("{transport} Opus {}k", playback.opus_bitrate / 1000)
+        }
+        BrowserPlaybackFormat::Flac => {
+            format!("{transport} FLAC {}Hz", playback.flac_sample_rate)
+        }
     }
 }
 

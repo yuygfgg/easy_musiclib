@@ -69,7 +69,7 @@ GET /api/tracks/{id_or_uuid}/download
 
 `stream` returns browser-playback audio in the configured playback format. `start_ms` is optional and defaults to `0`; when present, the stream starts at that millisecond offset relative to the track. For CUE tracks, the offset is relative to the CUE track start and is clamped to the CUE track's duration. Streaming is sequential by default and returns `Accept-Ranges: none`; clients should restart the stream with a new `start_ms` to seek. Add `buffered=true` when the client needs a `Content-Length`/HTTP Range compatible media response, such as Safari or iOS WebView.
 
-`hls/{file}` returns generated FLAC 48 kHz fMP4 HLS files for playable tracks. Valid file names are `playlist.m3u8`, `init.mp4`, and segment files matching `segment_00000.m4s`. Requesting the playlist starts HLS generation if the cache is missing; files may briefly return `404` with `HLS file is not ready` while generation is still in progress. The playlist is returned as `application/vnd.apple.mpegurl`; init and segment files are returned as `audio/mp4` and support HTTP Range.
+`hls/{file}` returns generated FLAC fMP4 HLS files for playable tracks at the configured FLAC sample rate. Valid file names are `playlist.m3u8`, `init.mp4`, and segment files matching `segment_00000.m4s`. Requesting the playlist starts HLS generation if the cache is missing; files may briefly return `404` with `HLS file is not ready` while generation is still in progress. The playlist is returned as `application/vnd.apple.mpegurl`; init and segment files are returned as `audio/mp4` and support HTTP Range.
 
 `download` returns the original/native track output. Ordinary file downloads support HTTP Range. CUE tracks are rendered as independent audio responses and do not expose the whole-album source file as a frontend URL.
 
@@ -77,19 +77,23 @@ GET /api/tracks/{id_or_uuid}/download
 
 ```text
 GET   /api/settings
-PATCH /api/settings { "browser_playback_format": "opus_256k" }
-PATCH /api/settings { "browser_playback_format": "flac_48k" }
+PATCH /api/settings { "browser_playback": { "format": "opus", "opus_bitrate": 256000, "flac_sample_rate": 48000 } }
+PATCH /api/settings { "browser_playback": { "format": "flac", "opus_bitrate": 256000, "flac_sample_rate": 48000 } }
 ```
 
 Response:
 
 ```json
 {
-  "browser_playback_format": "opus_256k"
+  "browser_playback": {
+    "format": "opus",
+    "opus_bitrate": 256000,
+    "flac_sample_rate": 48000
+  }
 }
 ```
 
-`browser_playback_format` controls the format used by `/api/tracks/{id_or_uuid}/stream`. Supported values are `opus_256k` and `flac_48k`.
+`browser_playback.format` controls the format used by `/api/tracks/{id_or_uuid}/stream`. Supported values are `opus` and `flac`. `opus_bitrate` is selected from common bitrates in bits per second: `64000`, `96000`, `128000`, `160000`, `192000`, `256000`, `320000`. `flac_sample_rate` is selected from common sample rates in Hz: `44100`, `48000`, `88200`, `96000`, `176400`, `192000`.
 
 ## Lyrics
 

@@ -1,4 +1,4 @@
-use crate::domain::{BrowserPlaybackFormat, PlaybackSource, TrackId};
+use crate::domain::{BrowserPlaybackSettings, PlaybackSource, TrackId};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use std::path::PathBuf;
@@ -33,7 +33,7 @@ pub struct RenderedAudio {
 #[derive(Debug, Clone)]
 pub struct BrowserAudioRequest {
     pub path: PathBuf,
-    pub format: BrowserPlaybackFormat,
+    pub playback: BrowserPlaybackSettings,
     pub start_ms: i64,
     pub end_ms: Option<i64>,
 }
@@ -44,12 +44,13 @@ pub struct HlsRenderRequest {
     pub output_dir: PathBuf,
     pub start_ms: i64,
     pub end_ms: Option<i64>,
+    pub flac_sample_rate: u32,
 }
 
 pub trait PlaybackMedia: Send + Sync {
     fn passthrough_renderer(&self) -> &'static str;
 
-    fn browser_audio_format(&self, format: BrowserPlaybackFormat) -> BrowserAudioFormat;
+    fn browser_audio_format(&self, playback: BrowserPlaybackSettings) -> BrowserAudioFormat;
 
     fn is_playable_renderer(&self, renderer_id: Option<&str>) -> bool;
 
@@ -76,7 +77,7 @@ pub trait PlaybackMedia: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct BrowserStreamPlan {
     pub source: PlaybackSource,
-    pub format: BrowserPlaybackFormat,
+    pub playback: BrowserPlaybackSettings,
     pub absolute_start_ms: i64,
     pub end_ms: Option<i64>,
     pub buffered: bool,
@@ -104,14 +105,14 @@ pub async fn track_render_source(
 
 pub fn browser_stream_plan(
     source: PlaybackSource,
-    format: BrowserPlaybackFormat,
+    playback: BrowserPlaybackSettings,
     requested_start_ms: i64,
     buffered: bool,
 ) -> BrowserStreamPlan {
     let (absolute_start_ms, end_ms) = browser_stream_time_range(&source, requested_start_ms);
     BrowserStreamPlan {
         source,
-        format,
+        playback,
         absolute_start_ms,
         end_ms,
         buffered,
@@ -151,7 +152,7 @@ mod tests {
     #[test]
     fn browser_stream_plan_clamps_relative_start_to_track_end() {
         let source = playback_source(Some(10_000), Some(20_000));
-        let plan = browser_stream_plan(source, BrowserPlaybackFormat::Opus256k, 50_000, false);
+        let plan = browser_stream_plan(source, BrowserPlaybackSettings::default(), 50_000, false);
 
         assert_eq!(plan.absolute_start_ms, 19_999);
         assert_eq!(plan.end_ms, Some(20_000));

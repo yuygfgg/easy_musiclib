@@ -12,9 +12,10 @@ use crate::util::{album_counts, album_date, paged_status, pretty_json};
 use easy_musiclib_macros::{match_any_view, spawn_result};
 use easy_musiclib_shared::{
     AlbumDetail, AlbumSummary, AliasCsvImportRequest, AppSettings, ArtistDetail, ArtistSummary,
-    BrowserPlaybackFormat, CreateArtistRequest, EventDetail, EventSummary, HlsCacheClearResponse,
-    MergeArtistsRequest, RelationGraph, ScanJobRequest, ScanJobStatus, TrackSummary,
-    UpdateAppSettingsRequest,
+    BROWSER_PLAYBACK_FLAC_SAMPLE_RATE_OPTIONS, BROWSER_PLAYBACK_OPUS_BITRATE_OPTIONS,
+    BrowserPlaybackFormat, BrowserPlaybackSettings, CreateArtistRequest, EventDetail, EventSummary,
+    HlsCacheClearResponse, MergeArtistsRequest, RelationGraph, ScanJobRequest, ScanJobStatus,
+    TrackSummary, UpdateAppSettingsRequest,
 };
 use leptos::prelude::*;
 
@@ -613,11 +614,10 @@ pub(crate) fn SettingsPage() -> impl IntoView {
     let (by_name, set_by_name) = signal(false);
     let (alias_csv, set_alias_csv) = signal(String::new());
     let (settings_status, set_settings_status) = signal(String::new());
-    let (browser_playback_format, set_browser_playback_format) =
-        signal(BrowserPlaybackFormat::default());
+    let (browser_playback, set_browser_playback) = signal(BrowserPlaybackSettings::default());
 
     Effect::new(move |_| {
-        spawn_settings_load(set_browser_playback_format, set_settings_status);
+        spawn_settings_load(set_browser_playback, set_settings_status);
     });
 
     let start_scan = move |_| {
@@ -678,17 +678,36 @@ pub(crate) fn SettingsPage() -> impl IntoView {
         );
     };
 
-    let save_playback = move |format: BrowserPlaybackFormat| {
-        set_browser_playback_format.set(format);
+    let save_playback = Callback::new(move |playback: BrowserPlaybackSettings| {
+        let playback = playback.normalized();
+        set_browser_playback.set(playback);
         set_settings_status.set(String::from("Saving playback"));
         let req = UpdateAppSettingsRequest {
-            browser_playback_format: format,
+            browser_playback: playback,
         };
         spawn_text_status(
             async move { api_patch_json::<AppSettings, _>("/api/settings", &req).await },
             set_settings_status,
             "Playback saved",
         );
+    });
+
+    let save_playback_format = move |format: BrowserPlaybackFormat| {
+        let mut playback = browser_playback.get_untracked();
+        playback.format = format;
+        save_playback.run(playback);
+    };
+
+    let save_opus_bitrate = move |value: String| {
+        let mut playback = browser_playback.get_untracked();
+        playback.opus_bitrate = parse_i64_or(&value, playback.opus_bitrate);
+        save_playback.run(playback);
+    };
+
+    let save_flac_sample_rate = move |value: String| {
+        let mut playback = browser_playback.get_untracked();
+        playback.flac_sample_rate = parse_i64_or(&value, playback.flac_sample_rate);
+        save_playback.run(playback);
     };
 
     let clear_hls_cache = move |_| {
@@ -718,19 +737,55 @@ pub(crate) fn SettingsPage() -> impl IntoView {
                         <input
                             type="radio"
                             name="browser-playback-format"
-                            prop:checked=move || browser_playback_format.get() == BrowserPlaybackFormat::Opus256k
-                            on:change=move |_| save_playback(BrowserPlaybackFormat::Opus256k)
+                            prop:checked=move || browser_playback.get().format == BrowserPlaybackFormat::Opus
+                            on:change=move |_| save_playback_format(BrowserPlaybackFormat::Opus)
                         />
-                        "Opus 256k"
+                        "Opus"
                     </label>
                     <label class="checkbox-row">
                         <input
                             type="radio"
                             name="browser-playback-format"
-                            prop:checked=move || browser_playback_format.get() == BrowserPlaybackFormat::Flac48k
-                            on:change=move |_| save_playback(BrowserPlaybackFormat::Flac48k)
+                            prop:checked=move || browser_playback.get().format == BrowserPlaybackFormat::Flac
+                            on:change=move |_| save_playback_format(BrowserPlaybackFormat::Flac)
                         />
-                        "FLAC 48kHz"
+                        "FLAC"
+                    </label>
+                </div>
+                <div class="settings-grid">
+                    <label class="setting-field">
+                        <span>"Opus bitrate (kbps)"</span>
+                        <select
+                            prop:value=move || browser_playback.get().opus_bitrate.to_string()
+                            on:change=move |ev| save_opus_bitrate(event_target_value(&ev))
+                        >
+                            <For
+                                each=move || BROWSER_PLAYBACK_OPUS_BITRATE_OPTIONS
+                                key=|bitrate| *bitrate
+                                children=move |bitrate| view! {
+                                    <option value=bitrate.to_string()>
+                                        {format!("{} kbps", bitrate / 1000)}
+                                    </option>
+                                }
+                            />
+                        </select>
+                    </label>
+                    <label class="setting-field">
+                        <span>"FLAC sample rate (Hz)"</span>
+                        <select
+                            prop:value=move || browser_playback.get().flac_sample_rate.to_string()
+                            on:change=move |ev| save_flac_sample_rate(event_target_value(&ev))
+                        >
+                            <For
+                                each=move || BROWSER_PLAYBACK_FLAC_SAMPLE_RATE_OPTIONS
+                                key=|sample_rate| *sample_rate
+                                children=move |sample_rate| view! {
+                                    <option value=sample_rate.to_string()>
+                                        {format_sample_rate(sample_rate)}
+                                    </option>
+                                }
+                            />
+                        </select>
                     </label>
                 </div>
                 <div class="button-row">
@@ -792,5 +847,17 @@ pub(crate) fn SettingsPage() -> impl IntoView {
                 <pre>{settings_status}</pre>
             </section>
         </section>
+    }
+}
+
+fn parse_i64_or(value: &str, fallback: i64) -> i64 {
+    value.trim().parse::<i64>().unwrap_or(fallback)
+}
+
+fn format_sample_rate(sample_rate: i64) -> String {
+    if sample_rate % 1000 == 0 {
+        format!("{} kHz", sample_rate / 1000)
+    } else {
+        format!("{:.1} kHz", sample_rate as f64 / 1000.0)
     }
 }
