@@ -15,8 +15,8 @@ pub enum CueRenderQuality {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackTranscodeFormat {
-    Opus256k,
-    Flac48k,
+    Opus { bit_rate: usize },
+    Flac { sample_rate: u32 },
 }
 
 pub const FLAC_HLS_PLAYLIST_FILE: &str = "playlist.m3u8";
@@ -29,15 +29,15 @@ pub const FLAC_HLS_SEGMENT_SECONDS: f64 = 2.0;
 impl PlaybackTranscodeFormat {
     pub fn mime(self) -> &'static str {
         match self {
-            Self::Opus256k => "audio/ogg; codecs=opus",
-            Self::Flac48k => "audio/flac",
+            Self::Opus { .. } => "audio/ogg; codecs=opus",
+            Self::Flac { .. } => "audio/flac",
         }
     }
 
     pub fn extension(self) -> &'static str {
         match self {
-            Self::Opus256k => "opus",
-            Self::Flac48k => "flac",
+            Self::Opus { .. } => "opus",
+            Self::Flac { .. } => "flac",
         }
     }
 }

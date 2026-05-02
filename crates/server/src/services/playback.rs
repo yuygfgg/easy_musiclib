@@ -3,7 +3,7 @@ use crate::application::playback::{
     HLS_PLAYLIST_FILE, HLS_PLAYLIST_MIME, PlaybackMedia,
 };
 use crate::application::settings as settings_app;
-use crate::domain::{BrowserPlaybackFormat, PlaybackSource};
+use crate::domain::{BrowserPlaybackSettings, PlaybackSource};
 use crate::http::responses::{audio_bytes_response, ranged_file_response};
 use crate::services::{hls_cache, track_duration};
 use crate::{ApiResult, AppError, AppState};
@@ -40,7 +40,7 @@ pub async fn stream_track_response(
         source,
         settings_app::get_settings(&state.repositories.settings)
             .await?
-            .browser_playback_format,
+            .browser_playback,
         requested_start_ms,
         buffered,
     );
@@ -62,15 +62,24 @@ pub async fn stream_track_hls_file_response(
     {
         return Err(AppError::bad_request("track is not playable"));
     }
-    let cache_dir = hls_cache::hls_cache_dir(id, &source).await?;
+    let playback = settings_app::get_settings(&state.repositories.settings)
+        .await?
+        .browser_playback;
+    let cache_dir = hls_cache::hls_cache_dir(id, &source, playback.flac_sample_rate).await?;
     let path = hls_cache::hls_file_path(&cache_dir, &file)?;
-    hls_cache::ensure_hls_generation(state.services.playback_media.clone(), &source, &cache_dir)
-        .await?;
-    hls_cache::wait_for_hls_file(&path, hls_cache::hls_file_timeout(&file)).await?;
+    hls_cache::ensure_hls_generation(
+        state.services.playback_media.clone(),
+        &source,
+        &cache_dir,
+        playback.flac_sample_rate,
+    )
+    .await?;
     let mime = hls_file_mime(&file)?;
     if file == HLS_PLAYLIST_FILE {
+        hls_cache::wait_for_hls_playlist_start(&cache_dir, &path).await?;
         return hls_playlist_response(&path).await;
     }
+    hls_cache::wait_for_hls_file(&path, hls_cache::hls_file_timeout(&file)).await?;
     let mut response = ranged_file_response(&path, mime, None, &headers, false).await?;
     response
         .headers_mut()
@@ -139,7 +148,7 @@ where
         return buffered_browser_audio(
             &playback_media,
             plan.source,
-            plan.format,
+            plan.playback,
             plan.absolute_start_ms,
             plan.end_ms,
             headers,
@@ -150,7 +159,7 @@ where
     streaming_browser_audio(
         playback_media,
         plan.source,
-        plan.format,
+        plan.playback,
         plan.absolute_start_ms,
         plan.end_ms,
     )
@@ -160,7 +169,7 @@ where
 async fn buffered_browser_audio(
     playback_media: &impl PlaybackMedia,
     source: PlaybackSource,
-    playback_format: BrowserPlaybackFormat,
+    playback: BrowserPlaybackSettings,
     absolute_start_ms: i64,
     end_ms: Option<i64>,
     headers: HeaderMap,
@@ -169,7 +178,7 @@ async fn buffered_browser_audio(
     let rendered = playback_media
         .transcode_browser_audio(BrowserAudioRequest {
             path: PathBuf::from(source.path),
-            format: playback_format,
+            playback,
             start_ms: absolute_start_ms,
             end_ms,
         })
@@ -188,7 +197,7 @@ async fn buffered_browser_audio(
 async fn streaming_browser_audio<M>(
     playback_media: M,
     source: PlaybackSource,
-    playback_format: BrowserPlaybackFormat,
+    playback: BrowserPlaybackSettings,
     absolute_start_ms: i64,
     end_ms: Option<i64>,
 ) -> ApiResult<Response>
@@ -201,13 +210,13 @@ where
     let output_fd = writer.into_raw_fd();
     let input_path = PathBuf::from(source.path.clone());
     let title = source.title.clone();
-    let format_info = playback_media.browser_audio_format(playback_format);
+    let format_info = playback_media.browser_audio_format(playback.clone());
     tokio::spawn(async move {
         if let Err(err) = playback_media
             .transcode_browser_audio_to_fd(
                 BrowserAudioRequest {
                     path: input_path.clone(),
-                    format: playback_format,
+                    playback,
                     start_ms: absolute_start_ms,
                     end_ms,
                 },

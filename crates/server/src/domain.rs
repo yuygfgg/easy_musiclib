@@ -327,13 +327,41 @@ impl ArtworkSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, o2o)]
 #[map_owned(api::BrowserPlaybackFormat)]
 pub enum BrowserPlaybackFormat {
-    Opus256k,
-    Flac48k,
+    Opus,
+    Flac,
 }
 
 impl Default for BrowserPlaybackFormat {
     fn default() -> Self {
-        Self::Opus256k
+        Self::Opus
+    }
+}
+
+#[derive(Debug, Clone, Copy, o2o)]
+#[map_owned(api::BrowserPlaybackSettings)]
+pub struct BrowserPlaybackSettings {
+    #[map(~.into())]
+    pub format: BrowserPlaybackFormat,
+    pub opus_bitrate: i64,
+    pub flac_sample_rate: i64,
+}
+
+impl Default for BrowserPlaybackSettings {
+    fn default() -> Self {
+        Self {
+            format: BrowserPlaybackFormat::default(),
+            opus_bitrate: api::DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE,
+            flac_sample_rate: api::DEFAULT_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE,
+        }
+    }
+}
+
+impl BrowserPlaybackSettings {
+    pub fn normalized(mut self) -> Self {
+        self.opus_bitrate = api::normalize_browser_playback_opus_bitrate(self.opus_bitrate);
+        self.flac_sample_rate =
+            api::normalize_browser_playback_flac_sample_rate(self.flac_sample_rate);
+        self
     }
 }
 
@@ -341,14 +369,21 @@ impl Default for BrowserPlaybackFormat {
 #[map_owned(api::AppSettings)]
 pub struct AppSettings {
     #[map(~.into())]
-    pub browser_playback_format: BrowserPlaybackFormat,
+    pub browser_playback: BrowserPlaybackSettings,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            browser_playback_format: BrowserPlaybackFormat::default(),
+            browser_playback: BrowserPlaybackSettings::default(),
         }
+    }
+}
+
+impl AppSettings {
+    pub fn normalized(mut self) -> Self {
+        self.browser_playback = self.browser_playback.normalized();
+        self
     }
 }
 
@@ -356,7 +391,14 @@ impl Default for AppSettings {
 #[map_owned(api::UpdateAppSettingsRequest)]
 pub struct UpdateAppSettings {
     #[map(~.into())]
-    pub browser_playback_format: BrowserPlaybackFormat,
+    pub browser_playback: BrowserPlaybackSettings,
+}
+
+impl UpdateAppSettings {
+    pub fn normalized(mut self) -> Self {
+        self.browser_playback = self.browser_playback.normalized();
+        self
+    }
 }
 
 #[derive(Debug, Clone)]

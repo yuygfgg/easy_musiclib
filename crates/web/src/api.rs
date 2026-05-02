@@ -89,25 +89,25 @@ pub(crate) fn spawn_text_status<T>(
 }
 
 pub(crate) fn spawn_settings_load(
-    set_browser_playback_format: WriteSignal<easy_musiclib_shared::BrowserPlaybackFormat>,
+    set_browser_playback: WriteSignal<easy_musiclib_shared::BrowserPlaybackSettings>,
     set_settings_status: WriteSignal<String>,
 ) {
     spawn_result! {
         api_get::<easy_musiclib_shared::AppSettings>("/api/settings"),
         Ok(settings) => {
-            set_browser_playback_format.set(settings.browser_playback_format);
+            set_browser_playback.set(settings.browser_playback);
             set_settings_status.set(String::from("Settings loaded"));
         },
         Err(err) => { set_settings_status.set(err); },
     };
 }
 
-pub(crate) fn spawn_settings_format_load(
-    set_browser_playback_format: WriteSignal<easy_musiclib_shared::BrowserPlaybackFormat>,
+pub(crate) fn spawn_playback_settings_load(
+    set_browser_playback: WriteSignal<easy_musiclib_shared::BrowserPlaybackSettings>,
 ) {
     spawn_async! {
         if let Ok(settings) = api_get::<easy_musiclib_shared::AppSettings>("/api/settings").await {
-            set_browser_playback_format.set(settings.browser_playback_format);
+            set_browser_playback.set(settings.browser_playback);
         }
     };
 }

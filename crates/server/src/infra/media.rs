@@ -6,7 +6,7 @@ use crate::application::scan::{
     CueSheetReader, CueTrack, DiscoveredAudioFile, DiscoveredCueFile, DiscoveredLibraryFiles,
     EmbeddedPictureInfo, LibraryFileDiscovery,
 };
-use crate::domain::{BrowserPlaybackFormat, PlaybackSource};
+use crate::domain::{BrowserPlaybackFormat, BrowserPlaybackSettings, PlaybackSource};
 use anyhow::Result;
 use easy_musiclib_media::cue as media_cue;
 use easy_musiclib_media::cue_render;
@@ -107,8 +107,8 @@ impl PlaybackMedia for FfmpegPlaybackMedia {
         cue_render::PASSTHROUGH_RENDERER
     }
 
-    fn browser_audio_format(&self, format: BrowserPlaybackFormat) -> BrowserAudioFormat {
-        let format = media_playback_format(format);
+    fn browser_audio_format(&self, playback: BrowserPlaybackSettings) -> BrowserAudioFormat {
+        let format = media_playback_format(playback);
         BrowserAudioFormat {
             mime: format.mime(),
             extension: format.extension(),
@@ -159,7 +159,7 @@ impl PlaybackMedia for FfmpegPlaybackMedia {
         request: BrowserAudioRequest,
     ) -> BoxFuture<'static, Result<RenderedAudio>> {
         async move {
-            let format = media_playback_format(request.format);
+            let format = media_playback_format(request.playback);
             let rendered = tokio::task::spawn_blocking(move || {
                 transcode::transcode_file_range_for_browser(
                     &request.path,
@@ -185,7 +185,7 @@ impl PlaybackMedia for FfmpegPlaybackMedia {
         output_fd: RawFd,
     ) -> BoxFuture<'static, Result<()>> {
         async move {
-            let format = media_playback_format(request.format);
+            let format = media_playback_format(request.playback);
             tokio::task::spawn_blocking(move || {
                 transcode::transcode_file_range_for_browser_to_fd(
                     &request.path,
@@ -204,11 +204,12 @@ impl PlaybackMedia for FfmpegPlaybackMedia {
     fn render_hls(&self, request: HlsRenderRequest) -> BoxFuture<'static, Result<()>> {
         async move {
             tokio::task::spawn_blocking(move || {
-                transcode::render_flac_48k_hls(
+                transcode::render_flac_hls(
                     &request.path,
                     &request.output_dir,
                     request.start_ms,
                     request.end_ms,
+                    request.flac_sample_rate,
                 )
             })
             .await??;
@@ -218,10 +219,15 @@ impl PlaybackMedia for FfmpegPlaybackMedia {
     }
 }
 
-fn media_playback_format(format: BrowserPlaybackFormat) -> PlaybackTranscodeFormat {
-    match format {
-        BrowserPlaybackFormat::Opus256k => PlaybackTranscodeFormat::Opus256k,
-        BrowserPlaybackFormat::Flac48k => PlaybackTranscodeFormat::Flac48k,
+fn media_playback_format(playback: BrowserPlaybackSettings) -> PlaybackTranscodeFormat {
+    let playback = playback.normalized();
+    match playback.format {
+        BrowserPlaybackFormat::Opus => PlaybackTranscodeFormat::Opus {
+            bit_rate: playback.opus_bitrate as usize,
+        },
+        BrowserPlaybackFormat::Flac => PlaybackTranscodeFormat::Flac {
+            sample_rate: playback.flac_sample_rate as u32,
+        },
     }
 }
 

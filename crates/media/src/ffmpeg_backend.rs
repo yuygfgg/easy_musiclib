@@ -116,11 +116,12 @@ pub fn transcode_bytes_for_browser(
     transcode_file_to_bytes(&input_path, FfmpegOutput::Playback(format), None)
 }
 
-pub fn render_flac_48k_hls(
+pub fn render_flac_hls(
     path: &Path,
     output_dir: &Path,
     start_ms: i64,
     end_ms: Option<i64>,
+    sample_rate: u32,
 ) -> Result<()> {
     init_ffmpeg()?;
     fs::create_dir_all(output_dir)
@@ -143,7 +144,7 @@ pub fn render_flac_48k_hls(
         &mut ictx,
         &mut octx,
         &playlist_path,
-        FfmpegOutput::HlsFlac48k,
+        FfmpegOutput::HlsFlac { sample_rate },
         Some(FilterRange::Time(TimeRange {
             start_ms: start_ms.max(0),
             end_ms,
@@ -176,7 +177,7 @@ enum FilterRange {
 enum FfmpegOutput {
     FlacSourceRate,
     Playback(PlaybackTranscodeFormat),
-    HlsFlac48k,
+    HlsFlac { sample_rate: u32 },
 }
 
 impl FfmpegOutput {
@@ -184,7 +185,7 @@ impl FfmpegOutput {
         match self {
             Self::FlacSourceRate => "audio/flac",
             Self::Playback(format) => format.mime(),
-            Self::HlsFlac48k => "application/vnd.apple.mpegurl",
+            Self::HlsFlac { .. } => "application/vnd.apple.mpegurl",
         }
     }
 
@@ -192,46 +193,48 @@ impl FfmpegOutput {
         match self {
             Self::FlacSourceRate => "flac",
             Self::Playback(format) => format.extension(),
-            Self::HlsFlac48k => "m3u8",
+            Self::HlsFlac { .. } => "m3u8",
         }
     }
 
     fn container_format(self) -> &'static str {
         match self {
-            Self::FlacSourceRate | Self::Playback(PlaybackTranscodeFormat::Flac48k) => "flac",
-            Self::Playback(PlaybackTranscodeFormat::Opus256k) => "ogg",
-            Self::HlsFlac48k => "hls",
+            Self::FlacSourceRate | Self::Playback(PlaybackTranscodeFormat::Flac { .. }) => "flac",
+            Self::Playback(PlaybackTranscodeFormat::Opus { .. }) => "ogg",
+            Self::HlsFlac { .. } => "hls",
         }
     }
 
     fn quality(self) -> CueRenderQuality {
         match self {
             Self::FlacSourceRate => CueRenderQuality::Lossless,
-            Self::Playback(PlaybackTranscodeFormat::Opus256k) => CueRenderQuality::Lossy,
-            Self::Playback(PlaybackTranscodeFormat::Flac48k) => CueRenderQuality::Lossless,
-            Self::HlsFlac48k => CueRenderQuality::Lossless,
+            Self::Playback(PlaybackTranscodeFormat::Opus { .. }) => CueRenderQuality::Lossy,
+            Self::Playback(PlaybackTranscodeFormat::Flac { .. }) => CueRenderQuality::Lossless,
+            Self::HlsFlac { .. } => CueRenderQuality::Lossless,
         }
     }
 
     fn encoder_name(self) -> Option<&'static str> {
         match self {
             Self::FlacSourceRate
-            | Self::Playback(PlaybackTranscodeFormat::Flac48k)
-            | Self::HlsFlac48k => Some("flac"),
-            Self::Playback(PlaybackTranscodeFormat::Opus256k) => Some("libopus"),
+            | Self::Playback(PlaybackTranscodeFormat::Flac { .. })
+            | Self::HlsFlac { .. } => Some("flac"),
+            Self::Playback(PlaybackTranscodeFormat::Opus { .. }) => Some("libopus"),
         }
     }
 
     fn target_rate(self, source_rate: u32) -> u32 {
         match self {
             Self::FlacSourceRate => source_rate,
-            Self::Playback(_) | Self::HlsFlac48k => 48_000,
+            Self::Playback(PlaybackTranscodeFormat::Opus { .. }) => 48_000,
+            Self::Playback(PlaybackTranscodeFormat::Flac { sample_rate })
+            | Self::HlsFlac { sample_rate } => sample_rate,
         }
     }
 
     fn bit_rate(self) -> Option<usize> {
         match self {
-            Self::Playback(PlaybackTranscodeFormat::Opus256k) => Some(256_000),
+            Self::Playback(PlaybackTranscodeFormat::Opus { bit_rate }) => Some(bit_rate),
             _ => None,
         }
     }
@@ -239,7 +242,7 @@ impl FfmpegOutput {
     fn is_flac(self) -> bool {
         matches!(
             self,
-            Self::FlacSourceRate | Self::Playback(PlaybackTranscodeFormat::Flac48k)
+            Self::FlacSourceRate | Self::Playback(PlaybackTranscodeFormat::Flac { .. })
         )
     }
 }
@@ -808,11 +811,21 @@ mod tests {
         let source = dir.path().join("source.wav");
         write_test_wav(&source, 5, 44_100);
 
-        let opus = transcode_file_for_browser(&source, PlaybackTranscodeFormat::Opus256k).unwrap();
+        let opus = transcode_file_for_browser(
+            &source,
+            PlaybackTranscodeFormat::Opus { bit_rate: 256_000 },
+        )
+        .unwrap();
         assert!(opus.bytes.len() > 1024);
         assert_duration_ms("opus", &dir.path().join("out.opus"), &opus.bytes, 4_500);
 
-        let flac = transcode_file_for_browser(&source, PlaybackTranscodeFormat::Flac48k).unwrap();
+        let flac = transcode_file_for_browser(
+            &source,
+            PlaybackTranscodeFormat::Flac {
+                sample_rate: 48_000,
+            },
+        )
+        .unwrap();
         assert!(flac.bytes.len() > 1024);
         assert_duration_ms("flac", &dir.path().join("out.flac"), &flac.bytes, 4_500);
     }
@@ -830,7 +843,7 @@ mod tests {
         let handle = std::thread::spawn(move || {
             transcode_file_range_for_browser_to_fd(
                 &source_for_thread,
-                PlaybackTranscodeFormat::Opus256k,
+                PlaybackTranscodeFormat::Opus { bit_rate: 256_000 },
                 2_000,
                 Some(4_000),
                 output_fd,
@@ -850,13 +863,13 @@ mod tests {
     }
 
     #[test]
-    fn renders_flac_48k_hls_vod_playlist() {
+    fn renders_flac_hls_vod_playlist_at_requested_sample_rate() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source.wav");
         let hls_dir = dir.path().join("hls");
         write_test_wav(&source, 5, 96_000);
 
-        render_flac_48k_hls(&source, &hls_dir, 0, None).unwrap();
+        render_flac_hls(&source, &hls_dir, 0, None, 44_100).unwrap();
 
         let playlist_path = hls_dir.join(FLAC_HLS_PLAYLIST_FILE);
         let playlist = fs::read_to_string(&playlist_path).unwrap();
@@ -872,12 +885,12 @@ mod tests {
         let context = ffmpeg::codec::context::Context::from_parameters(input.parameters()).unwrap();
         let mut decoder = context.decoder().audio().unwrap();
         decoder.set_parameters(input.parameters()).unwrap();
-        assert_eq!(decoder.rate(), 48_000);
+        assert_eq!(decoder.rate(), 44_100);
         assert_duration_ms("flac hls", &playlist_path, &[], 4_500);
     }
 
     #[test]
-    fn renders_flac_48k_hls_range_from_zero_media_time() {
+    fn renders_flac_hls_range_from_zero_media_time() {
         let dir = tempfile::tempdir().unwrap();
         let source_wav = dir.path().join("source.wav");
         let source = dir.path().join("source.flac");
@@ -885,7 +898,7 @@ mod tests {
         write_test_wav(&source_wav, 12, 96_000);
         transcode_file_to_path(&source_wav, &source, FfmpegOutput::FlacSourceRate, None).unwrap();
 
-        render_flac_48k_hls(&source, &hls_dir, 5_000, Some(10_000)).unwrap();
+        render_flac_hls(&source, &hls_dir, 5_000, Some(10_000), 48_000).unwrap();
 
         let first_segment = fs::read(hls_dir.join("segment_00000.m4s")).unwrap();
         assert_eq!(find_tfdt_base_media_decode_time(&first_segment), Some(0));

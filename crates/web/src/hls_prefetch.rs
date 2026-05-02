@@ -1,6 +1,8 @@
 use crate::api::api_get;
 use easy_musiclib_macros::spawn_async;
-use easy_musiclib_shared::{AppSettings, BrowserPlaybackFormat, TrackSummary};
+use easy_musiclib_shared::{
+    AppSettings, BrowserPlaybackFormat, BrowserPlaybackSettings, TrackSummary,
+};
 use gloo_net::http::Request;
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -20,9 +22,9 @@ pub(crate) fn hls_url(track_id: i64) -> String {
 
 pub(crate) fn audio_supports_flac_hls(
     audio: &web_sys::HtmlAudioElement,
-    format: BrowserPlaybackFormat,
+    playback: BrowserPlaybackSettings,
 ) -> bool {
-    if format != BrowserPlaybackFormat::Flac48k {
+    if playback.format != BrowserPlaybackFormat::Flac {
         return false;
     }
     audio
@@ -46,7 +48,7 @@ pub(crate) fn spawn_hls_page_prefetch(tracks: Vec<TrackSummary>) {
         if !is_active_prefetch_epoch(epoch) {
             return;
         }
-        if !browser_supports_flac_hls(settings.browser_playback_format) {
+        if !browser_supports_flac_hls(settings.browser_playback) {
             return;
         }
         prefetch_hls_track_ids(hls_page_prefetch_track_ids(&tracks), epoch);
@@ -65,7 +67,7 @@ pub(crate) fn prefetch_hls_playlist_tracks(
     );
 }
 
-fn browser_supports_flac_hls(format: BrowserPlaybackFormat) -> bool {
+fn browser_supports_flac_hls(playback: BrowserPlaybackSettings) -> bool {
     let Some(window) = web_sys::window() else {
         return false;
     };
@@ -78,7 +80,7 @@ fn browser_supports_flac_hls(format: BrowserPlaybackFormat) -> bool {
     let Ok(audio) = element.dyn_into::<web_sys::HtmlAudioElement>() else {
         return false;
     };
-    audio_supports_flac_hls(&audio, format)
+    audio_supports_flac_hls(&audio, playback)
 }
 
 fn next_prefetch_epoch() -> u64 {

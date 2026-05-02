@@ -1,11 +1,16 @@
 use crate::application::settings::SettingsRepository;
-use crate::domain::{AppSettings, BrowserPlaybackFormat, UpdateAppSettings};
+use crate::domain::{
+    AppSettings, BrowserPlaybackFormat, BrowserPlaybackSettings, UpdateAppSettings,
+};
 use anyhow::Result;
+use easy_musiclib_shared::{
+    DEFAULT_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE, DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE,
+};
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use sqlx::{Row, SqlitePool};
 
-const BROWSER_PLAYBACK_FORMAT_SETTING: &str = "browser_playback_format";
+const BROWSER_PLAYBACK_SETTING: &str = "browser_playback";
 
 #[derive(Clone)]
 pub struct SqliteSettingsRepository {
@@ -30,19 +35,21 @@ impl SettingsRepository for SqliteSettingsRepository {
 
 async fn app_settings(pool: &SqlitePool) -> Result<AppSettings> {
     Ok(AppSettings {
-        browser_playback_format: setting_json::<StoredBrowserPlaybackFormat>(
+        browser_playback: setting_json::<StoredBrowserPlaybackSettings>(
             pool,
-            BROWSER_PLAYBACK_FORMAT_SETTING,
+            BROWSER_PLAYBACK_SETTING,
         )
         .await?
         .map(Into::into)
         .unwrap_or_default(),
-    })
+    }
+    .normalized())
 }
 
 async fn update_app_settings(pool: &SqlitePool, req: UpdateAppSettings) -> Result<AppSettings> {
-    let format: StoredBrowserPlaybackFormat = req.browser_playback_format.into();
-    put_setting_json(pool, BROWSER_PLAYBACK_FORMAT_SETTING, &format).await?;
+    let req = req.normalized();
+    let playback: StoredBrowserPlaybackSettings = req.browser_playback.into();
+    put_setting_json(pool, BROWSER_PLAYBACK_SETTING, &playback).await?;
     app_settings(pool).await
 }
 
@@ -84,17 +91,71 @@ fn now_ms() -> i64 {
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 enum StoredBrowserPlaybackFormat {
-    #[serde(rename = "opus_256k")]
-    Opus256k,
-    #[serde(rename = "flac_48k")]
-    Flac48k,
+    #[serde(rename = "opus")]
+    Opus,
+    #[serde(rename = "flac")]
+    Flac,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+struct StoredBrowserPlaybackSettings {
+    #[serde(default)]
+    format: StoredBrowserPlaybackFormat,
+    #[serde(default = "default_opus_bitrate")]
+    opus_bitrate: i64,
+    #[serde(default = "default_flac_sample_rate")]
+    flac_sample_rate: i64,
+}
+
+impl Default for StoredBrowserPlaybackSettings {
+    fn default() -> Self {
+        Self {
+            format: StoredBrowserPlaybackFormat::default(),
+            opus_bitrate: DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE,
+            flac_sample_rate: DEFAULT_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE,
+        }
+    }
+}
+
+fn default_opus_bitrate() -> i64 {
+    DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE
+}
+
+fn default_flac_sample_rate() -> i64 {
+    DEFAULT_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE
+}
+
+impl Default for StoredBrowserPlaybackFormat {
+    fn default() -> Self {
+        Self::Opus
+    }
+}
+
+impl From<StoredBrowserPlaybackSettings> for BrowserPlaybackSettings {
+    fn from(value: StoredBrowserPlaybackSettings) -> Self {
+        Self {
+            format: value.format.into(),
+            opus_bitrate: value.opus_bitrate,
+            flac_sample_rate: value.flac_sample_rate,
+        }
+    }
+}
+
+impl From<BrowserPlaybackSettings> for StoredBrowserPlaybackSettings {
+    fn from(value: BrowserPlaybackSettings) -> Self {
+        Self {
+            format: value.format.into(),
+            opus_bitrate: value.opus_bitrate,
+            flac_sample_rate: value.flac_sample_rate,
+        }
+    }
 }
 
 impl From<StoredBrowserPlaybackFormat> for BrowserPlaybackFormat {
     fn from(value: StoredBrowserPlaybackFormat) -> Self {
         match value {
-            StoredBrowserPlaybackFormat::Opus256k => Self::Opus256k,
-            StoredBrowserPlaybackFormat::Flac48k => Self::Flac48k,
+            StoredBrowserPlaybackFormat::Opus => Self::Opus,
+            StoredBrowserPlaybackFormat::Flac => Self::Flac,
         }
     }
 }
@@ -102,8 +163,8 @@ impl From<StoredBrowserPlaybackFormat> for BrowserPlaybackFormat {
 impl From<BrowserPlaybackFormat> for StoredBrowserPlaybackFormat {
     fn from(value: BrowserPlaybackFormat) -> Self {
         match value {
-            BrowserPlaybackFormat::Opus256k => Self::Opus256k,
-            BrowserPlaybackFormat::Flac48k => Self::Flac48k,
+            BrowserPlaybackFormat::Opus => Self::Opus,
+            BrowserPlaybackFormat::Flac => Self::Flac,
         }
     }
 }
