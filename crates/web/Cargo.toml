@@ -34,4 +34,6 @@ web-sys = { workspace = true, features = [
     "UrlSearchParams",
     "Window",
     "Document",
+    "Element",
+    "HtmlElement",
 ] }

@@ -282,7 +282,7 @@ button:disabled {
 .art img,
 .hero-art img,
 .player-art-button img,
-.lyrics-track img {
+.lyrics-art img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -361,11 +361,11 @@ button:disabled {
   gap: 24px;
 }
 
-.detail-page > .section-header,
-.detail-page > .pagination,
-.detail-page > .track-list,
-.detail-page > .entity-list,
-.detail-page > .empty {
+.detail-page>.section-header,
+.detail-page>.pagination,
+.detail-page>.track-list,
+.detail-page>.entity-list,
+.detail-page>.empty {
   grid-column: 1 / -1;
 }
 
@@ -584,7 +584,7 @@ pre {
   bottom: 120px;
   z-index: 40;
   display: grid;
-  grid-template-columns: minmax(220px, .85fr) minmax(0, 1.15fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   min-height: 360px;
   overflow: hidden;
   border-radius: 8px;
@@ -621,11 +621,19 @@ pre {
   text-align: center;
 }
 
-.lyrics-track img {
+.lyrics-art {
   width: min(72%, 320px);
-  aspect-ratio: 1;
+  aspect-ratio: 1 / 1;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
   border-radius: 8px;
   background: #394353;
+}
+
+.lyrics-art img {
+  object-fit: contain;
 }
 
 .lyrics-track strong,
@@ -668,6 +676,7 @@ pre {
 .lyrics-content {
   min-height: 0;
   overflow-y: auto;
+  scroll-behavior: smooth;
   padding: 28px 22px 44px;
   color: #dbe4ef;
   white-space: pre-wrap;

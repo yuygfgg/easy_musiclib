@@ -17,13 +17,14 @@ use easy_musiclib_shared::{
 };
 use leptos::prelude::*;
 use std::rc::Rc;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 use wasm_bindgen_futures::JsFuture;
 
 #[component]
 pub(crate) fn Player() -> impl IntoView {
     let ctx = expect_context::<AppContext>();
     let audio_ref = NodeRef::<leptos::html::Audio>::new();
+    let lyrics_content_ref = NodeRef::<leptos::html::Div>::new();
     let (playing, set_playing) = signal(false);
     let (repeat, set_repeat) = signal(false);
     let (current_time, set_current_time) = signal(0.0_f64);
@@ -111,6 +112,22 @@ pub(crate) fn Player() -> impl IntoView {
             update_media_session(&track, title_override);
         }
     };
+
+    let scroll_lyrics_content_ref = lyrics_content_ref.clone();
+    Effect::new(move |_| {
+        let index = active_line.get();
+        let line_count = lyrics_lines.get().len();
+        if !lyrics_open.get() || !lyrics_loaded.get() || index < 0 || index as usize >= line_count {
+            return;
+        }
+        let content_ref = scroll_lyrics_content_ref.clone();
+        let callback = Closure::once_into_js(move || {
+            scroll_lyric_line_into_view(content_ref, index);
+        });
+        if let Some(window) = web_sys::window() {
+            let _ = window.request_animation_frame(callback.unchecked_ref::<js_sys::Function>());
+        }
+    });
 
     let track_duration = move || {
         ctx.current_track
@@ -482,9 +499,11 @@ pub(crate) fn Player() -> impl IntoView {
         <section class="lyrics-popup" class:hidden=move || !lyrics_open.get() role="dialog" aria-modal="true">
             <button class="lyrics-close" type="button" aria-label="Close lyrics" on:click=move |_| set_lyrics_open.set(false)>"×"</button>
             <div class="lyrics-track">
-                {move || ctx.current_track.get().and_then(|track| track.artwork_id).map(|id| view! {
-                    <img src=format!("/api/artwork/{id}?size=512") alt="" />
-                })}
+                <div class="lyrics-art">
+                    {move || ctx.current_track.get().and_then(|track| track.artwork_id).map(|id| view! {
+                        <img src=format!("/api/artwork/{id}?size=512") alt="" />
+                    })}
+                </div>
                 <strong>{move || ctx.current_track.get().map(|track| track.title).unwrap_or_else(|| String::from("No track playing"))}</strong>
                 <span>{move || ctx.current_track.get().map(|track| view! { <ArtistInlineLinks artists=track.artists /> })}</span>
                 <small>{move || ctx.current_track.get().and_then(|track| track.album).map(|album| view! { <EntityLink page=Page::Album { id: album.id.to_string() } label=album.name /> })}</small>
@@ -494,7 +513,7 @@ pub(crate) fn Player() -> impl IntoView {
                     <h3>"Lyrics"</h3>
                     <button type="button" on:click=open_lyrics_selection>"Settings"</button>
                 </div>
-                <div class="lyrics-content">
+                <div class="lyrics-content" node_ref=lyrics_content_ref>
                     {move || {
                         if lyrics_loaded.get() && !lyrics_lines.get().is_empty() {
                             view! {
@@ -502,7 +521,10 @@ pub(crate) fn Player() -> impl IntoView {
                                     each=move || { lyrics_lines.get().into_iter().enumerate().collect::<Vec<_>>() }
                                     key=|(index, line)| (*index, line.time_ms)
                                     children=move |(index, line)| view! {
-                                        <div class=move || { if active_line.get() == index as i64 { "lyrics-line current" } else { "lyrics-line" } }>
+                                        <div
+                                            id=format!("lyrics-line-{index}")
+                                            class=move || { if active_line.get() == index as i64 { "lyrics-line current" } else { "lyrics-line" } }
+                                        >
                                             {line.text}
                                             <For
                                                 each=move || line.translations.clone()
@@ -573,6 +595,28 @@ pub(crate) fn Player() -> impl IntoView {
             </div>
         </section>
     }
+}
+
+fn scroll_lyric_line_into_view(content_ref: NodeRef<leptos::html::Div>, index: i64) {
+    let Some(content) = content_ref.get() else {
+        return;
+    };
+    let content_height = content.client_height();
+    if content_height <= 0 {
+        return;
+    }
+    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
+        return;
+    };
+    let Some(line) = document.get_element_by_id(&format!("lyrics-line-{index}")) else {
+        return;
+    };
+    let Ok(line) = line.dyn_into::<web_sys::HtmlElement>() else {
+        return;
+    };
+
+    let target = line.offset_top() - ((content_height - line.client_height()) / 2);
+    content.set_scroll_top(target.max(0));
 }
 
 fn stream_url(track_id: i64, start_ms: i64) -> String {
