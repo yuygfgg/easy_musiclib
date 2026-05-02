@@ -750,7 +750,14 @@ pub async fn stream_track_hls_file(
     ensure_hls_generation(&source, &cache_dir).await?;
     wait_for_hls_file(&path, hls_file_timeout(&file)).await?;
     let mime = hls_file_mime(&file)?;
-    ranged_file_response(&path, mime, None, &headers, false).await
+    if file == FLAC_HLS_PLAYLIST_FILE {
+        return hls_playlist_response(&path).await;
+    }
+    let mut response = ranged_file_response(&path, mime, None, &headers, false).await?;
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    Ok(response)
 }
 
 pub async fn download_track(
@@ -848,6 +855,49 @@ fn hls_file_timeout(file: &str) -> Duration {
     } else {
         Duration::from_secs(30)
     }
+}
+
+async fn hls_playlist_response(path: &FsPath) -> ApiResult<Response> {
+    let playlist = tokio::fs::read_to_string(path).await?;
+    let playlist = hls_playlist_for_playback(&playlist);
+    let len = playlist.len();
+    let mut response = (StatusCode::OK, Body::from(playlist)).into_response();
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static(FLAC_HLS_PLAYLIST_MIME),
+    );
+    response.headers_mut().insert(
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&len.to_string()).unwrap(),
+    );
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    Ok(response)
+}
+
+fn hls_playlist_for_playback(playlist: &str) -> String {
+    if playlist.contains("#EXT-X-START:") {
+        return playlist.to_owned();
+    }
+
+    let insert_after = playlist
+        .lines()
+        .position(|line| line.starts_with("#EXT-X-VERSION"))
+        .or_else(|| playlist.lines().position(|line| line == "#EXTM3U"));
+    let Some(insert_after) = insert_after else {
+        return playlist.to_owned();
+    };
+
+    let mut out = String::with_capacity(playlist.len() + 48);
+    for (index, line) in playlist.lines().enumerate() {
+        out.push_str(line);
+        out.push('\n');
+        if index == insert_after {
+            out.push_str("#EXT-X-START:TIME-OFFSET=0.000,PRECISE=YES\n");
+        }
+    }
+    out
 }
 
 async fn ensure_hls_generation(source: &db::RenderSourceRow, cache_dir: &FsPath) -> ApiResult<()> {
@@ -1426,6 +1476,24 @@ mod tests {
     use sqlx::sqlite::SqlitePoolOptions;
     use std::io::Write;
     use std::sync::Arc;
+
+    #[test]
+    fn hls_playlist_for_playback_prefers_zero_start_for_event_playlist() {
+        let playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:2.000000,\nsegment_00000.m4s\n";
+
+        let rewritten = hls_playlist_for_playback(playlist);
+
+        assert!(rewritten.contains(
+            "#EXT-X-VERSION:7\n#EXT-X-START:TIME-OFFSET=0.000,PRECISE=YES\n#EXT-X-PLAYLIST-TYPE:EVENT"
+        ));
+    }
+
+    #[test]
+    fn hls_playlist_for_playback_keeps_existing_start_tag() {
+        let playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-START:TIME-OFFSET=0.000,PRECISE=YES\n#EXT-X-PLAYLIST-TYPE:VOD\n";
+
+        assert_eq!(hls_playlist_for_playback(playlist), playlist);
+    }
 
     #[tokio::test]
     async fn fetch_track_detail_backfills_missing_file_duration() {

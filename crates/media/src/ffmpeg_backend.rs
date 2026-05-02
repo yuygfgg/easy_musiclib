@@ -876,6 +876,21 @@ mod tests {
         assert_duration_ms("flac hls", &playlist_path, &[], 4_500);
     }
 
+    #[test]
+    fn renders_flac_48k_hls_range_from_zero_media_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let source_wav = dir.path().join("source.wav");
+        let source = dir.path().join("source.flac");
+        let hls_dir = dir.path().join("hls");
+        write_test_wav(&source_wav, 12, 96_000);
+        transcode_file_to_path(&source_wav, &source, FfmpegOutput::FlacSourceRate, None).unwrap();
+
+        render_flac_48k_hls(&source, &hls_dir, 5_000, Some(10_000)).unwrap();
+
+        let first_segment = fs::read(hls_dir.join("segment_00000.m4s")).unwrap();
+        assert_eq!(find_tfdt_base_media_decode_time(&first_segment), Some(0));
+    }
+
     fn assert_duration_ms(label: &str, path: &Path, bytes: &[u8], min_ms: i64) {
         if !bytes.is_empty() {
             fs::write(path, bytes).unwrap();
@@ -918,6 +933,51 @@ mod tests {
             samples += frame.samples() as i64;
         }
         samples
+    }
+
+    fn find_tfdt_base_media_decode_time(bytes: &[u8]) -> Option<u64> {
+        find_box(bytes, b"tfdt", 0, bytes.len()).and_then(|(offset, size)| {
+            let payload = bytes.get(offset + 8..offset + size)?;
+            let version = *payload.first()?;
+            match version {
+                0 => payload
+                    .get(4..8)
+                    .and_then(|value| value.try_into().ok())
+                    .map(u32::from_be_bytes)
+                    .map(u64::from),
+                1 => payload
+                    .get(4..12)
+                    .and_then(|value| value.try_into().ok())
+                    .map(u64::from_be_bytes),
+                _ => None,
+            }
+        })
+    }
+
+    fn find_box(
+        bytes: &[u8],
+        needle: &[u8; 4],
+        start: usize,
+        end: usize,
+    ) -> Option<(usize, usize)> {
+        let mut offset = start;
+        while offset.checked_add(8)? <= end {
+            let size = u32::from_be_bytes(bytes.get(offset..offset + 4)?.try_into().ok()?) as usize;
+            let name = bytes.get(offset + 4..offset + 8)?;
+            if size < 8 || offset.checked_add(size)? > end {
+                return None;
+            }
+            if name == needle {
+                return Some((offset, size));
+            }
+            if matches!(name, b"moof" | b"traf") {
+                if let Some(found) = find_box(bytes, needle, offset + 8, offset + size) {
+                    return Some(found);
+                }
+            }
+            offset += size;
+        }
+        None
     }
 
     fn write_test_wav(path: &Path, seconds: u32, sample_rate: u32) {

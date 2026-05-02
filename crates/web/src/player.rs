@@ -143,12 +143,8 @@ pub(crate) fn Player() -> impl IntoView {
                 } else {
                     let _ = audio.pause();
                     audio.set_src(&url);
+                    set_pending_hls_seek.set(Some(position));
                     audio.load();
-                    if position > 0.0 {
-                        set_pending_hls_seek.set(Some(position));
-                    } else {
-                        set_pending_hls_seek.set(None);
-                    }
                 }
                 if autoplay {
                     match audio.play() {
