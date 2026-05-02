@@ -1,0 +1,38 @@
+[package]
+name = "easy_musiclib_server"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+base64.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+easy_musiclib_media = { path = "../media" }
+easy_musiclib_shared = { path = "../shared" }
+futures.workspace = true
+hex.workspace = true
+html-escape.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+image.workspace = true
+mime_guess.workspace = true
+percent-encoding.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+urlencoding.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

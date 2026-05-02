@@ -1,39 +1,70 @@
-## EASY MUSIC LIBRARY
+# Easy Musiclib
 
-A self-hosted music library, including server and webui. Supports muitiple artists per track and album.
+## Build
 
-### Screen Shots
+```bash
+cargo build -p easy_musiclib_server
+cargo test
+```
 
-https://github.com/yuygfgg/easy_musiclib/assets/140488233/9d9ad2b4-c3d5-4b4a-9faa-0ac6fe2a8cd8
+Leptos source can be checked separately:
 
-<img width="1268" alt="截屏2024-08-09 22 02 18" src="https://github.com/user-attachments/assets/060fa715-df3c-40fd-8bee-f97b79d05a62">
-<img width="1266" alt="截屏2024-08-09 22 02 53" src="https://github.com/user-attachments/assets/ae94fddf-ff60-46b6-88fe-45dd7397eff8">
-<img width="1267" alt="截屏2024-08-09 22 03 05" src="https://github.com/user-attachments/assets/52b080e7-3fe2-40ed-9827-689bc93c8546">
-<img width="1272" alt="截屏2024-08-09 22 03 55" src="https://github.com/user-attachments/assets/7b386ee1-3e2e-4bb3-ae81-9b096aa73d2e">
-<img width="1269" alt="截屏2024-08-09 22 04 48" src="https://github.com/user-attachments/assets/edbc9f2e-bd6a-440d-8f22-2b3bd75ef7a3">
-<img width="1268" alt="截屏2024-08-09 22 04 57" src="https://github.com/user-attachments/assets/2289b93e-414f-4afa-a0e3-ccfb0d3ab2fe">
-<img width="1272" alt="截屏2024-08-09 22 05 27" src="https://github.com/user-attachments/assets/2924f478-ffc4-46da-8994-eb09ab19a3ce">
+```bash
+cargo check -p easy_musiclib_web --target wasm32-unknown-unknown
+```
 
+Build the browser bundle with `wasm-bindgen`:
 
-### Usage
+```bash
+cargo build -p easy_musiclib_web --target wasm32-unknown-unknown --release
+wasm-bindgen \
+  --target web \
+  --out-dir crates/web/dist \
+  --out-name easy_musiclib_web \
+  target/wasm32-unknown-unknown/release/easy_musiclib_web.wasm
+```
 
-#### Server Setup
-1. Clone the repository
-2. Install all necessary python packages ``` pip3 install -r requirements.txt ```
-3. Run server ```python3 server.py ```
+## Run
 
-#### Scan Directory
-1. Goto settings page
-2. Enter your music folder and click Scan button
+```bash
+cargo build -p easy_musiclib_server --release
 
-#### Merge Unintendedly Splitted Artists
-The programme splits artists with delimiters, so single artist with these delimiters in name will be splitted unintendedly.
-1. Goto settings page.
-2. Add a new artist with the single artist's name (e.g. A&B/C)
-3. Perform merge artist by name (or by uuid if you want) multiple times. (e.g. 1. merge A&B/C with A 2. merge A&B/C with B 3. merge A&B/C with C)
+MUSICLIB_DB=musiclib.db \
+MUSICLIB_BIND=0.0.0.0:5010 \
+MUSICLIB_STATIC_DIR=crates/web/dist \
+target/release/easy_musiclib_server
+```
 
-#### Webui
-1. Webui is avaliable at http://server_address:5010/
+Open `http://127.0.0.1:5010/`.
 
-#### API
-1. APIs are at http://server_address:5010/api/
+## Scan
+
+Use the settings page, or call the API:
+
+```bash
+curl -X POST http://127.0.0.1:5010/api/scan-jobs \
+  -H 'content-type: application/json' \
+  --data '{"roots":["/Volumes/smb/media/music"]}'
+```
+
+Poll:
+
+```bash
+curl http://127.0.0.1:5010/api/scan-jobs/1
+```
+
+## Import Old JSON
+
+To migrate the old Python save file, use a new empty SQLite database path:
+
+```bash
+MUSICLIB_DB=musiclib.db \
+target/release/easy_musiclib_server import-json library_data.json
+```
+
+The importer prints progress to stderr. By default it only migrates JSON data and stored file paths; it does not call `stat` on every audio file. If you explicitly want to record file size and mtime during import, add `--stat-files`:
+
+```bash
+MUSICLIB_DB=musiclib.db \
+target/release/easy_musiclib_server import-json library_data.json --stat-files
+```

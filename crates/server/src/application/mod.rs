@@ -1,0 +1,11 @@
+pub mod artists;
+pub mod artwork;
+pub mod catalog;
+pub mod lyrics;
+pub mod maintenance;
+pub mod playback;
+pub mod relations;
+pub mod scan;
+pub mod scan_jobs;
+pub mod settings;
+pub mod track_duration;

@@ -1,0 +1,14 @@
+pub mod artists;
+pub mod artwork;
+pub mod catalog;
+pub(crate) mod db;
+pub mod import_old;
+pub mod lyrics_cache;
+pub mod maintenance;
+pub mod playback;
+pub mod relations;
+pub mod scan_jobs;
+pub mod scan_library;
+pub(crate) mod schema;
+pub mod settings;
+pub mod track_duration;
