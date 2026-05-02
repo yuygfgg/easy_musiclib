@@ -33,7 +33,8 @@ pub async fn fetch_event_detail(pool: &SqlitePool, id: i64) -> Result<EventDetai
     let rows = sqlx::query(
         "SELECT al.id, al.uuid, al.title, al.artwork_id, al.year, al.date, al.liked_at,
             ev.id AS event_id, ev.uuid AS event_uuid, ev.name AS event_name,
-            (SELECT COUNT(*) FROM tracks t WHERE t.album_id = al.id) AS song_count
+            (SELECT COUNT(*) FROM tracks t WHERE t.album_id = al.id) AS song_count,
+            (SELECT COUNT(DISTINCT CASE WHEN t.disc_no > 0 THEN t.disc_no ELSE 1 END) FROM tracks t WHERE t.album_id = al.id) AS disc_count
          FROM albums al
          JOIN event_albums ea ON ea.album_id = al.id
          JOIN events ev ON ev.id = ea.event_id

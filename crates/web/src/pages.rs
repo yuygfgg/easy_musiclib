@@ -8,7 +8,7 @@ use crate::ui::{
     AlbumList, ArtistInlineLinks, ArtistList, EntityLink, EventList, HeroArtwork, Pager,
     RelationGraphView, TrackList,
 };
-use crate::util::{album_date, paged_status, pretty_json};
+use crate::util::{album_counts, album_date, paged_status, pretty_json};
 use easy_musiclib_macros::{match_any_view, spawn_result};
 use easy_musiclib_shared::{
     AlbumDetail, AlbumSummary, AliasCsvImportRequest, AppSettings, ArtistDetail, ArtistSummary,
@@ -328,6 +328,8 @@ pub(crate) fn AlbumPage(id: String) -> impl IntoView {
             {move || match_any_view!(detail.get(), {
                 Some(album) => {
                     let summary = album.summary.clone();
+                    let date = album_date(&summary.date, summary.year);
+                    let counts = album_counts(&summary);
                     view! {
                         <>
                             <HeroArtwork artwork_id=summary.artwork_id />
@@ -335,7 +337,13 @@ pub(crate) fn AlbumPage(id: String) -> impl IntoView {
                                 <h2>{summary.title.clone()}</h2>
                                 <p><ArtistInlineLinks artists=summary.album_artists.clone() /></p>
                                 <p>
-                                    {album_date(&summary.date, summary.year)}
+                                    {(!date.is_empty()).then(|| view! {
+                                        <>
+                                            {date.clone()}
+                                            " · "
+                                        </>
+                                    })}
+                                    {counts}
                                     {summary.event.clone().map(|event| view! {
                                         <>
                                             " · "
@@ -348,7 +356,7 @@ pub(crate) fn AlbumPage(id: String) -> impl IntoView {
                                 </button>
                             </section>
                             <div class="section-header"><h3>"Tracks"</h3></div>
-                            <TrackList tracks=tracks />
+                            <TrackList tracks=tracks show_disc_dividers=true />
                         </>
                     }
                 },

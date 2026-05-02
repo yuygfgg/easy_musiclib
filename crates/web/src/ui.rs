@@ -7,8 +7,10 @@ use crate::relation_layout::{
     relation_graph_layout_tick,
 };
 use crate::route::Page;
-use crate::util::{album_date, playable_tracks, total_pages};
-use easy_musiclib_macros::{entity_list_component, js_function, js_get, spawn_result};
+use crate::util::{album_counts, album_date, playable_tracks, total_pages};
+use easy_musiclib_macros::{
+    entity_list_component, js_function, js_get, match_any_view, spawn_result,
+};
 use easy_musiclib_shared::{
     AlbumSummary, ArtistSummary, EntityRef, EventSummary, Id, LikePatch, RelationEdge,
     RelationGraph, RelationNode, TrackDetail, TrackSummary,
@@ -28,7 +30,10 @@ const RELAX_FRAME_LIMIT: u32 = 48;
 const RELAX_STOP_SHIFT: f64 = 0.18;
 
 #[component]
-pub(crate) fn TrackList(tracks: Signal<Vec<TrackSummary>>) -> impl IntoView {
+pub(crate) fn TrackList(
+    tracks: Signal<Vec<TrackSummary>>,
+    #[prop(optional)] show_disc_dividers: bool,
+) -> impl IntoView {
     Effect::new(move |_| {
         spawn_hls_page_prefetch(tracks.get());
     });
@@ -36,12 +41,61 @@ pub(crate) fn TrackList(tracks: Signal<Vec<TrackSummary>>) -> impl IntoView {
     view! {
         <div class="track-list">
             <For
-                each=move || { tracks.get().into_iter().enumerate().collect::<Vec<_>>() }
-                key=|(index, track)| (*index, track.id)
-                children=move |(index, track)| view! { <TrackItem track=track index=index tracks=tracks /> }
+                each=move || track_list_rows(tracks.get(), show_disc_dividers)
+                key=|row| row.key()
+                children=move |row| match_any_view!(row, {
+                    TrackListRow::DiscDivider { disc_no, .. } => view! {
+                        <div class="disc-divider">{format!("disc{disc_no}")}</div>
+                    },
+                    TrackListRow::Track { index, track } => view! {
+                        <TrackItem track=track index=index tracks=tracks />
+                    },
+                })
             />
         </div>
     }
+}
+
+#[derive(Clone)]
+enum TrackListRow {
+    DiscDivider { disc_no: i64, index: usize },
+    Track { index: usize, track: TrackSummary },
+}
+
+impl TrackListRow {
+    fn key(&self) -> String {
+        match self {
+            Self::DiscDivider { disc_no, index } => format!("disc-{disc_no}-{index}"),
+            Self::Track { track, .. } => format!("track-{}", track.id),
+        }
+    }
+}
+
+fn track_list_rows(tracks: Vec<TrackSummary>, show_disc_dividers: bool) -> Vec<TrackListRow> {
+    let show_disc_dividers =
+        show_disc_dividers && has_multiple_discs(tracks.iter().map(track_disc_no));
+    let mut rows = Vec::with_capacity(tracks.len() * if show_disc_dividers { 2 } else { 1 });
+    let mut current_disc = None;
+    for (index, track) in tracks.into_iter().enumerate() {
+        let disc_no = track_disc_no(&track);
+        if show_disc_dividers && current_disc != Some(disc_no) {
+            rows.push(TrackListRow::DiscDivider { disc_no, index });
+            current_disc = Some(disc_no);
+        }
+        rows.push(TrackListRow::Track { index, track });
+    }
+    rows
+}
+
+fn has_multiple_discs(mut disc_numbers: impl Iterator<Item = i64>) -> bool {
+    let Some(first) = disc_numbers.next() else {
+        return false;
+    };
+    disc_numbers.any(|disc_no| disc_no != first)
+}
+
+fn track_disc_no(track: &TrackSummary) -> i64 {
+    track.disc_no.filter(|disc_no| *disc_no > 0).unwrap_or(1)
 }
 
 #[component]
@@ -146,13 +200,14 @@ fn AlbumCard(album: AlbumSummary) -> impl IntoView {
     let target = Page::Album {
         id: album.id.to_string(),
     };
+    let counts = album_counts(&album);
     view! {
         <article class="entity clickable" on:click=move |_| ctx.navigate.run(target.clone())>
             <Artwork artwork_id=album.artwork_id size=160 />
             <div class="meta">
                 <strong>{album.title.clone()}</strong>
                 <span><ArtistInlineLinks artists=album.album_artists.clone() /></span>
-                <small>{format!("{} · {} tracks", album_date(&album.date, album.year), album.song_count)}</small>
+                <small>{format!("{} · {counts}", album_date(&album.date, album.year))}</small>
             </div>
             <div class="entity-mark">{if album.liked_at.is_some() { "♥" } else { "" }}</div>
         </article>

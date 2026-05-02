@@ -9,7 +9,8 @@ pub async fn fetch_album_summary(pool: &SqlitePool, id: i64) -> Result<AlbumSumm
     let row = sqlx::query(
         "SELECT al.id, al.uuid, al.title, al.artwork_id, al.year, al.date, al.liked_at,
             ev.id AS event_id, ev.uuid AS event_uuid, ev.name AS event_name,
-            (SELECT COUNT(*) FROM tracks t WHERE t.album_id = al.id) AS song_count
+            (SELECT COUNT(*) FROM tracks t WHERE t.album_id = al.id) AS song_count,
+            (SELECT COUNT(DISTINCT CASE WHEN t.disc_no > 0 THEN t.disc_no ELSE 1 END) FROM tracks t WHERE t.album_id = al.id) AS disc_count
          FROM albums al
          LEFT JOIN events ev ON ev.id = al.event_id
          WHERE al.id = ?",
@@ -36,6 +37,7 @@ pub(super) async fn album_summary_from_row(
         date: row.try_get("date")?,
         liked_at: row.try_get("liked_at")?,
         song_count: row.try_get("song_count")?,
+        disc_count: row.try_get("disc_count")?,
     })
 }
 
@@ -53,7 +55,7 @@ pub async fn fetch_album_detail(pool: &SqlitePool, id: i64) -> Result<AlbumDetai
          LEFT JOIN events ev ON ev.id = t.event_id
          LEFT JOIN track_audio_sources tas ON tas.track_id = t.id
          WHERE t.album_id = ?
-         ORDER BY COALESCE(t.disc_no, 1), COALESCE(t.track_no, 999999), t.id",
+         ORDER BY CASE WHEN t.disc_no > 0 THEN t.disc_no ELSE 1 END, COALESCE(t.track_no, 999999), t.id",
     )
     .bind(id)
     .fetch_all(pool)
@@ -122,7 +124,8 @@ pub async fn list_albums(
     let mut qb = QueryBuilder::<Sqlite>::new(
         "SELECT DISTINCT al.id, al.uuid, al.title, al.artwork_id, al.year, al.date, al.liked_at,
             ev.id AS event_id, ev.uuid AS event_uuid, ev.name AS event_name,
-            (SELECT COUNT(*) FROM tracks t WHERE t.album_id = al.id) AS song_count
+            (SELECT COUNT(*) FROM tracks t WHERE t.album_id = al.id) AS song_count,
+            (SELECT COUNT(DISTINCT CASE WHEN t.disc_no > 0 THEN t.disc_no ELSE 1 END) FROM tracks t WHERE t.album_id = al.id) AS disc_count
          FROM albums al
          LEFT JOIN events ev ON ev.id = al.event_id",
     );

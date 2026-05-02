@@ -252,6 +252,28 @@ button:disabled {
   box-shadow: 0 0 0 1px rgba(47, 125, 225, .2);
 }
 
+.disc-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 2px 0;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.disc-divider::before,
+.disc-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #dfe5ed;
+}
+
+.disc-divider::before {
+  flex: 0 0 18px;
+}
+
 .unavailable-track {
   cursor: default;
   opacity: .7;

@@ -62,6 +62,7 @@ pub struct AlbumSummary {
     pub date: Option<String>,
     pub liked_at: Option<i64>,
     pub song_count: i64,
+    pub disc_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
