@@ -1,8 +1,26 @@
 use crate::handlers;
-use crate::{AppState, schema};
+use crate::infra::artwork::{FilesystemArtworkSourceReader, ImageArtworkProcessor};
+use crate::infra::lyrics::NeteaseLyricsProvider;
+use crate::infra::media::{
+    FfmpegPlaybackMedia, FilesystemCueSheetReader, FilesystemLibraryFileDiscovery,
+    LoftyAudioMetadataReader, MediaArtistNameParser, StaticCueRendererSelector,
+};
+use crate::infra::sqlite::artists::SqliteArtistRepository;
+use crate::infra::sqlite::artwork::SqliteArtworkRepository;
+use crate::infra::sqlite::catalog::SqliteCatalogRepository;
+use crate::infra::sqlite::lyrics_cache::SqliteLyricsCacheRepository;
+use crate::infra::sqlite::maintenance::SqliteMaintenanceRepository;
+use crate::infra::sqlite::playback::SqlitePlaybackRepository;
+use crate::infra::sqlite::relations::SqliteRelationRepository;
+use crate::infra::sqlite::scan_jobs::SqliteScanJobRepository;
+use crate::infra::sqlite::scan_library::SqliteScanLibraryRepository;
+use crate::infra::sqlite::settings::SqliteSettingsRepository;
+use crate::infra::sqlite::track_duration::SqliteTrackDurationRepository;
+use crate::{AppRepositories, AppServices, AppState};
 use anyhow::Result;
 use axum::Router;
 use axum::routing::{get, post};
+use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -24,6 +42,41 @@ pub async fn build_state_with_max_connections(
     static_dir: PathBuf,
     max_connections: u32,
 ) -> Result<AppState> {
+    let pool = build_pool(db_path, max_connections).await?;
+    Ok(state_from_pool(pool, static_dir))
+}
+
+pub(crate) fn state_from_pool(pool: SqlitePool, static_dir: PathBuf) -> AppState {
+    AppState {
+        static_dir: Arc::new(static_dir),
+        repositories: AppRepositories {
+            catalog: SqliteCatalogRepository::new(pool.clone()),
+            settings: SqliteSettingsRepository::new(pool.clone()),
+            lyrics_cache: SqliteLyricsCacheRepository::new(pool.clone()),
+            scan_jobs: SqliteScanJobRepository::new(pool.clone()),
+            scan_library: SqliteScanLibraryRepository::new(pool.clone()),
+            artists: SqliteArtistRepository::new(pool.clone()),
+            relations: SqliteRelationRepository::new(pool.clone()),
+            artwork: SqliteArtworkRepository::new(pool.clone()),
+            playback: SqlitePlaybackRepository::new(pool.clone()),
+            track_duration: SqliteTrackDurationRepository::new(pool.clone()),
+            maintenance: SqliteMaintenanceRepository::new(pool.clone()),
+        },
+        services: AppServices {
+            lyrics_provider: NeteaseLyricsProvider,
+            library_file_discovery: FilesystemLibraryFileDiscovery,
+            audio_metadata_reader: LoftyAudioMetadataReader,
+            cue_sheet_reader: FilesystemCueSheetReader,
+            cue_renderer_selector: StaticCueRendererSelector,
+            artist_name_parser: MediaArtistNameParser,
+            artwork_source_reader: FilesystemArtworkSourceReader,
+            artwork_image_processor: ImageArtworkProcessor,
+            playback_media: FfmpegPlaybackMedia,
+        },
+    }
+}
+
+pub async fn build_pool(db_path: &str, max_connections: u32) -> Result<SqlitePool> {
     let options = SqliteConnectOptions::from_str(&format!("sqlite://{db_path}"))?
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal)
@@ -32,11 +85,8 @@ pub async fn build_state_with_max_connections(
         .max_connections(max_connections)
         .connect_with(options)
         .await?;
-    schema::init_db(&pool).await?;
-    Ok(AppState {
-        pool,
-        static_dir: Arc::new(static_dir),
-    })
+    crate::infra::sqlite::schema::init_db(&pool).await?;
+    Ok(pool)
 }
 
 pub fn router(state: AppState) -> Router {

@@ -26,13 +26,9 @@ async fn main() -> Result<()> {
             .find(|arg| arg.as_str() != "--stat-files")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("library_data.json"));
-        let state =
-            easy_musiclib_server::app::build_state_with_max_connections(&db_path, static_dir, 1)
-                .await?;
-        let report = easy_musiclib_server::import_old::import_library_data(
-            &state.pool,
-            &json_path,
-            stat_files,
+        let pool = easy_musiclib_server::app::build_pool(&db_path, 1).await?;
+        let report = easy_musiclib_server::infra::sqlite::import_old::import_library_data(
+            &pool, &json_path, stat_files,
         )
         .await?;
         println!(

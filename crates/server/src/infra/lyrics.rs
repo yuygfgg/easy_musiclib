@@ -1,9 +1,27 @@
+use crate::application::lyrics::LyricsProvider;
+use crate::domain::LyricsCandidate;
 use anyhow::Result;
 use easy_musiclib_media::normalize::fuzzy_score;
-use easy_musiclib_shared::LyricsCandidate;
+use futures::FutureExt;
+use futures::future::BoxFuture;
 use serde_json::Value;
 
-pub async fn search_netease(
+#[derive(Debug, Clone, Default)]
+pub struct NeteaseLyricsProvider;
+
+impl LyricsProvider for NeteaseLyricsProvider {
+    fn search_lyrics<'a>(
+        &'a self,
+        title: &'a str,
+        artist: &'a str,
+        album: Option<&'a str>,
+        duration_ms: Option<i64>,
+    ) -> BoxFuture<'a, Result<Vec<LyricsCandidate>>> {
+        async move { search_netease(title, artist, album, duration_ms).await }.boxed()
+    }
+}
+
+async fn search_netease(
     title: &str,
     artist: &str,
     album: Option<&str>,

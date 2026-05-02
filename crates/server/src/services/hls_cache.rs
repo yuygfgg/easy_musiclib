@@ -1,7 +1,9 @@
-use crate::{ApiResult, AppError, db};
+use crate::application::playback::{
+    HLS_INIT_FILE, HLS_PLAYLIST_FILE, HlsRenderRequest, PlaybackMedia,
+};
+use crate::domain::{PlaybackSource, TrackId};
+use crate::{ApiResult, AppError};
 use anyhow::Context;
-use easy_musiclib_media::render::{FLAC_HLS_INIT_FILE, FLAC_HLS_PLAYLIST_FILE};
-use easy_musiclib_media::transcode::render_flac_48k_hls;
 use easy_musiclib_shared::HlsCacheClearResponse;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -24,7 +26,7 @@ pub async fn clear_hls_cache() -> ApiResult<HlsCacheClearResponse> {
     Ok(summary)
 }
 
-pub async fn hls_cache_dir(track_id: i64, source: &db::RenderSourceRow) -> ApiResult<PathBuf> {
+pub async fn hls_cache_dir(track_id: TrackId, source: &PlaybackSource) -> ApiResult<PathBuf> {
     let metadata = tokio::fs::metadata(&source.path).await?;
     let modified = metadata
         .modified()
@@ -34,7 +36,7 @@ pub async fn hls_cache_dir(track_id: i64, source: &db::RenderSourceRow) -> ApiRe
         .unwrap_or(0);
     let mut hasher = Sha256::new();
     hasher.update(b"flac-48k-fmp4-hls-v1");
-    hasher.update(track_id.to_le_bytes());
+    hasher.update(track_id.raw().to_le_bytes());
     hasher.update(source.path.as_bytes());
     hasher.update(source.renderer.as_bytes());
     hasher.update(source.codec.as_bytes());
@@ -49,7 +51,7 @@ pub fn hls_file_path(cache_dir: &Path, file: &str) -> ApiResult<PathBuf> {
     if file.contains('/') || file.contains('\\') || file.contains("..") {
         return Err(AppError::bad_request("invalid HLS file name"));
     }
-    if file == FLAC_HLS_PLAYLIST_FILE || file == FLAC_HLS_INIT_FILE || is_hls_segment_file(file) {
+    if file == HLS_PLAYLIST_FILE || file == HLS_INIT_FILE || is_hls_segment_file(file) {
         return Ok(cache_dir.join(file));
     }
     Err(AppError::not_found("HLS file not found"))
@@ -66,7 +68,7 @@ pub fn is_hls_segment_file(file: &str) -> bool {
 }
 
 pub fn hls_file_timeout(file: &str) -> Duration {
-    if file == FLAC_HLS_PLAYLIST_FILE || file == FLAC_HLS_INIT_FILE {
+    if file == HLS_PLAYLIST_FILE || file == HLS_INIT_FILE {
         Duration::from_secs(15)
     } else {
         Duration::from_secs(30)
@@ -97,10 +99,14 @@ pub fn hls_playlist_for_playback(playlist: &str) -> String {
     out
 }
 
-pub async fn ensure_hls_generation(
-    source: &db::RenderSourceRow,
+pub async fn ensure_hls_generation<M>(
+    playback_media: M,
+    source: &PlaybackSource,
     cache_dir: &Path,
-) -> ApiResult<()> {
+) -> ApiResult<()>
+where
+    M: PlaybackMedia + Clone + Send + Sync + 'static,
+{
     if tokio::fs::metadata(hls_complete_path(cache_dir))
         .await
         .is_ok()
@@ -122,19 +128,30 @@ pub async fn ensure_hls_generation(
     let input_path = PathBuf::from(source.path.clone());
     let start_ms = source.start_ms.unwrap_or(0).max(0);
     let end_ms = source.end_ms;
-    tokio::task::spawn_blocking(move || {
-        let result = (|| -> anyhow::Result<()> {
+    tokio::spawn(async move {
+        let result = async {
             if cache_dir.exists() {
-                std::fs::remove_dir_all(&cache_dir)
+                tokio::fs::remove_dir_all(&cache_dir)
+                    .await
                     .with_context(|| format!("removing stale HLS cache {}", cache_dir.display()))?;
             }
-            std::fs::create_dir_all(&cache_dir)
+            tokio::fs::create_dir_all(&cache_dir)
+                .await
                 .with_context(|| format!("creating HLS cache {}", cache_dir.display()))?;
-            render_flac_48k_hls(&input_path, &cache_dir, start_ms, end_ms)?;
-            std::fs::write(hls_complete_path(&cache_dir), b"ok")
+            playback_media
+                .render_hls(HlsRenderRequest {
+                    path: input_path.clone(),
+                    output_dir: cache_dir.clone(),
+                    start_ms,
+                    end_ms,
+                })
+                .await?;
+            tokio::fs::write(hls_complete_path(&cache_dir), b"ok")
+                .await
                 .with_context(|| format!("writing HLS complete marker {}", cache_dir.display()))?;
-            Ok(())
-        })();
+            Ok::<_, anyhow::Error>(())
+        }
+        .await;
         if let Err(err) = result {
             tracing::error!(
                 path = %input_path.display(),

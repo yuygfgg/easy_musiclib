@@ -1,4 +1,4 @@
-use crate::db;
+use crate::infra::sqlite::db;
 use anyhow::{Context, Result};
 use easy_musiclib_media::cue_render::PASSTHROUGH_RENDERER;
 use easy_musiclib_media::formats::format_by_extension;
@@ -469,7 +469,6 @@ fn parse_time_ms(input: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema;
     use sqlx::sqlite::SqlitePoolOptions;
 
     #[tokio::test]
@@ -478,7 +477,7 @@ mod tests {
             .max_connections(1)
             .connect("sqlite::memory:")
             .await?;
-        schema::init_db(&pool).await?;
+        crate::infra::sqlite::schema::init_db(&pool).await?;
 
         let temp = tempfile::tempdir()?;
         let json_path = temp.path().join("library_data.json");
