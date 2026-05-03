@@ -1,6 +1,7 @@
 use crate::api::{
-    api_get, api_patch_json, api_post_json, list_url, spawn_detail_load, spawn_json_status,
-    spawn_like_patch, spawn_list_load, spawn_settings_load, spawn_text_status, start_scan_poll,
+    api_delete, api_get, api_patch_json, api_post_json, list_url, spawn_detail_load,
+    spawn_json_status, spawn_like_patch, spawn_list_load, spawn_settings_load, spawn_text_status,
+    start_scan_poll,
 };
 use crate::app::AppContext;
 use crate::route::Page;
@@ -9,13 +10,15 @@ use crate::ui::{
     RelationGraphView, TrackList,
 };
 use crate::util::{album_counts, album_date, paged_status, pretty_json};
-use easy_musiclib_macros::{match_any_view, spawn_result};
+use easy_musiclib_macros::{match_any_view, spawn_async, spawn_result};
 use easy_musiclib_shared::{
-    AlbumDetail, AlbumSummary, AliasCsvImportRequest, AppSettings, ArtistDetail, ArtistSummary,
-    BROWSER_PLAYBACK_FLAC_SAMPLE_RATE_OPTIONS, BROWSER_PLAYBACK_OPUS_BITRATE_OPTIONS,
-    BrowserPlaybackFormat, BrowserPlaybackSettings, CreateArtistRequest, EventDetail, EventSummary,
-    HlsCacheClearResponse, MergeArtistsRequest, RelationGraph, ScanJobRequest, ScanJobStatus,
-    TrackSummary, UpdateAppSettingsRequest,
+    AccountListResponse, AccountSummary, AlbumDetail, AlbumSummary, AliasCsvImportRequest,
+    AppSettings, ArtistDetail, ArtistSummary, BROWSER_PLAYBACK_FLAC_SAMPLE_RATE_OPTIONS,
+    BROWSER_PLAYBACK_OPUS_BITRATE_OPTIONS, BrowserPlaybackFormat, BrowserPlaybackSettings,
+    CreateAccountRequest, CreateArtistRequest, DeleteAccountResponse, EventDetail, EventSummary,
+    HlsCacheClearResponse, LoginRequest, LoginResponse, MergeArtistsRequest, RelationGraph,
+    ScanJobRequest, ScanJobStatus, TrackSummary, UpdateAccountPasswordRequest,
+    UpdateAppSettingsRequest,
 };
 use leptos::prelude::*;
 
@@ -615,9 +618,23 @@ pub(crate) fn SettingsPage() -> impl IntoView {
     let (alias_csv, set_alias_csv) = signal(String::new());
     let (settings_status, set_settings_status) = signal(String::new());
     let (browser_playback, set_browser_playback) = signal(BrowserPlaybackSettings::default());
+    let (accounts, set_accounts) = signal(Vec::<AccountSummary>::new());
+    let (account_username, set_account_username) = signal(String::new());
+    let (account_password, set_account_password) = signal(String::new());
+    let (password_account, set_password_account) = signal(None::<String>);
+    let (password_update, set_password_update) = signal(String::new());
+
+    let reload_accounts = Callback::new(move |_| {
+        spawn_result! {
+            api_get::<AccountListResponse>("/api/settings/accounts"),
+            Ok(data) => { set_accounts.set(data.accounts); },
+            Err(err) => { set_settings_status.set(err); },
+        };
+    });
 
     Effect::new(move |_| {
         spawn_settings_load(set_browser_playback, set_settings_status);
+        reload_accounts.run(());
     });
 
     let start_scan = move |_| {
@@ -710,6 +727,96 @@ pub(crate) fn SettingsPage() -> impl IntoView {
         save_playback.run(playback);
     };
 
+    let add_account = move || {
+        let username = account_username.get_untracked().trim().to_string();
+        let password = account_password.get_untracked();
+        if username.is_empty() || password.is_empty() {
+            set_settings_status.set(String::from("Username and password are required"));
+            return;
+        }
+        if accounts
+            .get_untracked()
+            .iter()
+            .any(|account| account.username.eq_ignore_ascii_case(&username))
+        {
+            set_settings_status.set(String::from(
+                "Account already exists; change its password from the account list",
+            ));
+            return;
+        }
+        let was_open = accounts.get_untracked().is_empty();
+        let req = CreateAccountRequest {
+            username: username.clone(),
+            password: password.clone(),
+        };
+        set_settings_status.set(String::from("Saving account"));
+        spawn_async! {
+            match api_post_json::<AccountSummary, _>("/api/settings/accounts", &req).await {
+                Ok(_) => {
+                    set_account_username.set(String::new());
+                    set_account_password.set(String::new());
+                    set_password_account.set(None);
+                    set_password_update.set(String::new());
+                    if was_open {
+                        let login_req = LoginRequest { username, password };
+                        match api_post_json::<LoginResponse, _>("/api/auth/login", &login_req).await {
+                            Ok(_) => set_settings_status.set(String::from("Account saved")),
+                            Err(err) => set_settings_status.set(err),
+                        }
+                    } else {
+                        set_settings_status.set(String::from("Account saved"));
+                    }
+                    reload_accounts.run(());
+                }
+                Err(err) => set_settings_status.set(err),
+            }
+        };
+    };
+
+    let begin_password_update = Callback::new(move |username: String| {
+        set_password_account.set(Some(username));
+        set_password_update.set(String::new());
+    });
+
+    let cancel_password_update = move |_| {
+        set_password_account.set(None);
+        set_password_update.set(String::new());
+    };
+
+    let update_password = Callback::new(move |username: String| {
+        let password = password_update.get_untracked();
+        if password.is_empty() {
+            set_settings_status.set(String::from("New password is required"));
+            return;
+        }
+        let req = UpdateAccountPasswordRequest { password };
+        let url = format!("/api/settings/accounts/{}", urlencoding::encode(&username));
+        spawn_result! {
+            api_patch_json::<AccountSummary, _>(&url, &req),
+            Ok(_) => {
+                set_password_account.set(None);
+                set_password_update.set(String::new());
+                set_settings_status.set(String::from("Password updated"));
+                reload_accounts.run(());
+            },
+            Err(err) => { set_settings_status.set(err); },
+        };
+    });
+
+    let delete_account_action = Callback::new(move |username: String| {
+        let url = format!("/api/settings/accounts/{}", urlencoding::encode(&username));
+        spawn_result! {
+            api_delete::<DeleteAccountResponse>(&url),
+            Ok(_) => {
+                set_password_account.set(None);
+                set_password_update.set(String::new());
+                set_settings_status.set(String::from("Account deleted"));
+                reload_accounts.run(());
+            },
+            Err(err) => { set_settings_status.set(err); },
+        };
+    });
+
     let clear_hls_cache = move |_| {
         set_settings_status.set(String::from("Clearing HLS cache"));
         let req = serde_json::json!({});
@@ -790,6 +897,108 @@ pub(crate) fn SettingsPage() -> impl IntoView {
                 </div>
                 <div class="button-row">
                     <button type="button" on:click=clear_hls_cache>"Clear HLS cache"</button>
+                </div>
+            </section>
+            <section class="settings-section">
+                <h3>"Accounts"</h3>
+                <form
+                    class="account-create"
+                    on:submit=move |ev| {
+                        ev.prevent_default();
+                        add_account();
+                    }
+                >
+                    <label class="setting-field">
+                        <span>"Username"</span>
+                        <input
+                            autocomplete="username"
+                            placeholder="New username"
+                            prop:value=account_username
+                            on:input=move |ev| set_account_username.set(event_target_value(&ev))
+                        />
+                    </label>
+                    <label class="setting-field">
+                        <span>"Password"</span>
+                        <input
+                            type="password"
+                            autocomplete="new-password"
+                            placeholder="New password"
+                            prop:value=account_password
+                            on:input=move |ev| set_account_password.set(event_target_value(&ev))
+                        />
+                    </label>
+                    <button type="submit">"Add account"</button>
+                </form>
+                <p class=move || if accounts.get().is_empty() { "empty account-empty" } else { "hidden" }>
+                    "No accounts"
+                </p>
+                <div class="account-list">
+                    <For
+                        each=move || accounts.get()
+                        key=|account| account.username.clone()
+                        children=move |account| {
+                            let username = account.username;
+                            let display_username = username.clone();
+                            let edit_username = username.clone();
+                            let delete_username = username.clone();
+                            let editor_username = username.clone();
+                            view! {
+                                <div class="account-row">
+                                    <span class="account-name">{display_username}</span>
+                                    <div class="account-row-actions">
+                                        <button
+                                            type="button"
+                                            class="secondary-button"
+                                            on:click=move |_| begin_password_update.run(edit_username.clone())
+                                        >
+                                            "Change password"
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="danger-button"
+                                            on:click=move |_| delete_account_action.run(delete_username.clone())
+                                        >
+                                            "Delete"
+                                        </button>
+                                    </div>
+                                    {move || {
+                                        if password_account.get().as_deref() == Some(editor_username.as_str()) {
+                                            let submit_username = editor_username.clone();
+                                            view! {
+                                                <form
+                                                    class="account-password-editor"
+                                                    on:submit=move |ev| {
+                                                        ev.prevent_default();
+                                                        update_password.run(submit_username.clone());
+                                                    }
+                                                >
+                                                    <label class="setting-field">
+                                                        <span>"New password"</span>
+                                                        <input
+                                                            type="password"
+                                                            autocomplete="new-password"
+                                                            prop:value=password_update
+                                                            on:input=move |ev| set_password_update.set(event_target_value(&ev))
+                                                        />
+                                                    </label>
+                                                    <button type="submit">"Save password"</button>
+                                                    <button
+                                                        type="button"
+                                                        class="secondary-button"
+                                                        on:click=cancel_password_update
+                                                    >
+                                                        "Cancel"
+                                                    </button>
+                                                </form>
+                                            }.into_any()
+                                        } else {
+                                            view! { <div class="hidden"></div> }.into_any()
+                                        }
+                                    }}
+                                </div>
+                            }
+                        }
+                    />
                 </div>
             </section>
             <section class="settings-section">

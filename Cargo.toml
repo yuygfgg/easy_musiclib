@@ -20,6 +20,7 @@ rust-version = "1.95"
 
 [workspace.dependencies]
 anyhow = "1.0.102"
+argon2 = { version = "0.5.3", features = ["std"] }
 axum = "0.8.8"
 base64 = "0.22.1"
 bytes = "1.11.1"
@@ -27,6 +28,7 @@ chrono = { version = "0.4.41", default-features = false, features = ["clock", "s
 console_error_panic_hook = "0.1.7"
 ffmpeg-next = "8.1.0"
 futures = "0.3.31"
+getrandom = "0.3.4"
 gloo-net = "0.6.0"
 hex = "0.4.3"
 html-escape = "0.2.13"
@@ -53,8 +55,9 @@ symphonia-core = "0.5.2"
 tempfile = "3.25.0"
 thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = ["full"] }
+tokio-rustls = { version = "0.26.4", default-features = false, features = ["logging", "ring"] }
 tokio-util = { version = "0.7.18", features = ["io"] }
-tower-http = { version = "0.6.8", features = ["compression-full", "cors", "fs", "trace"] }
+tower-http = { version = "0.6.8", features = ["compression-full", "fs", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 urlencoding = "2.1.3"

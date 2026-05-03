@@ -322,6 +322,24 @@ CREATE TABLE IF NOT EXISTS app_settings (
   updated_at INTEGER NOT NULL
 );
 -- statement
+CREATE TABLE IF NOT EXISTS accounts (
+  id INTEGER PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  username_norm TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+-- statement
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  token_hash TEXT PRIMARY KEY,
+  account_id INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
+);
+-- statement
 CREATE TABLE IF NOT EXISTS scan_jobs (
   id INTEGER PRIMARY KEY,
   status TEXT NOT NULL,
@@ -394,4 +412,8 @@ CREATE INDEX IF NOT EXISTS idx_event_albums_album ON event_albums(album_id, even
 CREATE INDEX IF NOT EXISTS idx_artist_relations_b ON artist_relation_edges(artist_b_id);
 -- statement
 CREATE INDEX IF NOT EXISTS idx_media_files_scan ON media_files(path_hash, size, mtime_ns);
+-- statement
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_account ON auth_sessions(account_id, expires_at);
+-- statement
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
 "#;

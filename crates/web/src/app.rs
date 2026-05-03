@@ -1,11 +1,12 @@
+use crate::api::{api_post_json, spawn_auth_status_load};
 use crate::pages::{
     AlbumPage, ArtistPage, EventPage, LikedPage, RelationPage, SearchPage, SettingsPage,
 };
 use crate::player::Player;
 use crate::route::{Page, read_current_page, write_history};
 use crate::util::nav_class;
-use easy_musiclib_macros::match_any_view;
-use easy_musiclib_shared::TrackSummary;
+use easy_musiclib_macros::{match_any_view, spawn_result};
+use easy_musiclib_shared::{AuthStatusResponse, LoginRequest, TrackSummary};
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::Closure;
@@ -41,6 +42,9 @@ pub(crate) fn App() -> impl IntoView {
     let (playlist_index, set_playlist_index) = signal(-1_i64);
     let (status, set_status) = signal(String::from("Ready"));
     let (track_update, set_track_update) = signal::<Option<TrackSummary>>(None);
+    let (auth_status, set_auth_status) = signal::<Option<AuthStatusResponse>>(None);
+    let (login_username, set_login_username) = signal(String::new());
+    let (login_password, set_login_password) = signal(String::new());
 
     let navigate = Callback::new(move |target: Page| {
         write_history(&target, false);
@@ -96,63 +100,159 @@ pub(crate) fn App() -> impl IntoView {
         }
     });
 
+    Effect::new(move |_| {
+        spawn_auth_status_load(set_auth_status, set_status);
+    });
+
+    let logout = Callback::new(move |_| {
+        let req = serde_json::json!({});
+        spawn_result! {
+            api_post_json::<AuthStatusResponse, _>("/api/auth/logout", &req),
+            Ok(updated) => {
+                set_auth_status.set(Some(updated));
+                set_current_track.set(None);
+                set_playlist.set(Vec::new());
+                set_playlist_index.set(-1);
+                set_status.set(String::from("Login required"));
+            },
+            Err(err) => { set_status.set(err); },
+        };
+    });
+
     view! {
-        <main class="app-shell">
-            <aside class="app-sidebar">
-                <div class="brand">
-                    <h1>"Easy Musiclib"</h1>
-                    <p>{status}</p>
-                </div>
-                <nav class="shell-nav" aria-label="Main navigation">
-                    <button
-                        type="button"
-                        class=move || nav_class(matches!(page.get(), Page::Liked))
-                        on:click=move |_| navigate.run(Page::Liked)
+        {move || match_any_view!(auth_status.get(), {
+            None => view! {
+                <main class="auth-shell">
+                    <section class="auth-panel">
+                        <h1>"Easy Musiclib"</h1>
+                        <p>{status}</p>
+                    </section>
+                </main>
+            },
+            Some(auth) if auth.login_required && !auth.authenticated => view! {
+                <main class="auth-shell">
+                    <form
+                        class="auth-panel"
+                        on:submit=move |ev| {
+                            ev.prevent_default();
+                            let username = login_username.get_untracked().trim().to_string();
+                            let password = login_password.get_untracked();
+                            let secure_transport = auth_status
+                                .get_untracked()
+                                .map(|status| status.secure_transport)
+                                .unwrap_or(true);
+                            let req = LoginRequest { username, password };
+                            set_status.set(String::from("Signing in"));
+                            spawn_result! {
+                                api_post_json::<easy_musiclib_shared::LoginResponse, _>("/api/auth/login", &req),
+                                Ok(login) => {
+                                    set_auth_status.set(Some(AuthStatusResponse {
+                                        login_required: true,
+                                        authenticated: true,
+                                        username: Some(login.username.clone()),
+                                        secure_transport,
+                                    }));
+                                    set_login_password.set(String::new());
+                                    set_status.set(format!("Signed in as {}", login.username));
+                                },
+                                Err(err) => { set_status.set(err); },
+                            };
+                        }
                     >
-                        "Liked"
-                    </button>
-                    <button
-                        type="button"
-                        class=move || nav_class(matches!(page.get(), Page::Search { .. }))
-                        on:click=move |_| navigate.run(Page::Search { q: String::new() })
-                    >
-                        "Search"
-                    </button>
-                    <button
-                        type="button"
-                        class=move || nav_class(matches!(page.get(), Page::Settings))
-                        on:click=move |_| navigate.run(Page::Settings)
-                    >
-                        "Settings"
-                    </button>
-                </nav>
-                <form
-                    class="shell-search"
-                    on:submit=move |ev| {
-                        ev.prevent_default();
-                        navigate.run(Page::Search { q: shell_query.get_untracked().trim().to_string() });
-                    }
-                >
-                    <input
-                        placeholder="Search library"
-                        prop:value=shell_query
-                        on:input=move |ev| set_shell_query.set(event_target_value(&ev))
-                    />
-                    <button type="submit">"Go"</button>
-                </form>
-            </aside>
-            <section class="app-content">
-                {move || match_any_view!(page.get(), {
-                    Page::Liked => view! { <LikedPage /> },
-                    Page::Search { q } => view! { <SearchPage initial_query=q /> },
-                    Page::Album { id } => view! { <AlbumPage id=id /> },
-                    Page::Artist { id } => view! { <ArtistPage id=id /> },
-                    Page::Event { id } => view! { <EventPage id=id /> },
-                    Page::Relation { artist_id } => view! { <RelationPage artist_id=artist_id /> },
-                    Page::Settings => view! { <SettingsPage /> },
-                })}
-            </section>
-            <Player />
-        </main>
+                        <h1>"Easy Musiclib"</h1>
+                        <label class="setting-field">
+                            <span>"Username"</span>
+                            <input
+                                autocomplete="username"
+                                prop:value=login_username
+                                on:input=move |ev| set_login_username.set(event_target_value(&ev))
+                            />
+                        </label>
+                        <label class="setting-field">
+                            <span>"Password"</span>
+                            <input
+                                type="password"
+                                autocomplete="current-password"
+                                prop:value=login_password
+                                on:input=move |ev| set_login_password.set(event_target_value(&ev))
+                            />
+                        </label>
+                        <button type="submit">"Log in"</button>
+                        <p>{status}</p>
+                    </form>
+                </main>
+            },
+            _ => view! {
+                <main class="app-shell">
+                    <aside class="app-sidebar">
+                        <div class="brand">
+                            <h1>"Easy Musiclib"</h1>
+                            <p>{status}</p>
+                        </div>
+                        <nav class="shell-nav" aria-label="Main navigation">
+                            <button
+                                type="button"
+                                class=move || nav_class(matches!(page.get(), Page::Liked))
+                                on:click=move |_| navigate.run(Page::Liked)
+                            >
+                                "Liked"
+                            </button>
+                            <button
+                                type="button"
+                                class=move || nav_class(matches!(page.get(), Page::Search { .. }))
+                                on:click=move |_| navigate.run(Page::Search { q: String::new() })
+                            >
+                                "Search"
+                            </button>
+                            <button
+                                type="button"
+                                class=move || nav_class(matches!(page.get(), Page::Settings))
+                                on:click=move |_| navigate.run(Page::Settings)
+                            >
+                                "Settings"
+                            </button>
+                            {move || match_any_view!(auth_status.get(), {
+                                Some(auth) if auth.login_required => view! {
+                                    <button
+                                        type="button"
+                                        class="nav-button"
+                                        on:click=move |_| logout.run(())
+                                    >
+                                        "Logout"
+                                    </button>
+                                },
+                                _ => view! { <span class="hidden"></span> },
+                            })}
+                        </nav>
+                        <form
+                            class="shell-search"
+                            on:submit=move |ev| {
+                                ev.prevent_default();
+                                navigate.run(Page::Search { q: shell_query.get_untracked().trim().to_string() });
+                            }
+                        >
+                            <input
+                                placeholder="Search library"
+                                prop:value=shell_query
+                                on:input=move |ev| set_shell_query.set(event_target_value(&ev))
+                            />
+                            <button type="submit">"Go"</button>
+                        </form>
+                    </aside>
+                    <section class="app-content">
+                        {move || match_any_view!(page.get(), {
+                            Page::Liked => view! { <LikedPage /> },
+                            Page::Search { q } => view! { <SearchPage initial_query=q /> },
+                            Page::Album { id } => view! { <AlbumPage id=id /> },
+                            Page::Artist { id } => view! { <ArtistPage id=id /> },
+                            Page::Event { id } => view! { <EventPage id=id /> },
+                            Page::Relation { artist_id } => view! { <RelationPage artist_id=artist_id /> },
+                            Page::Settings => view! { <SettingsPage /> },
+                        })}
+                    </section>
+                    <Player />
+                </main>
+            },
+        })}
     }
 }

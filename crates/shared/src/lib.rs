@@ -273,6 +273,53 @@ pub struct UpdateAppSettingsRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthStatusResponse {
+    pub login_required: bool,
+    pub authenticated: bool,
+    pub username: Option<String>,
+    pub secure_transport: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginResponse {
+    pub username: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountSummary {
+    pub username: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountListResponse {
+    pub accounts: Vec<AccountSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateAccountRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateAccountPasswordRequest {
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteAccountResponse {
+    pub deleted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HlsCacheClearResponse {
     pub cache_dir: String,
     pub removed_files: u64,

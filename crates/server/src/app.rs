@@ -7,6 +7,7 @@ use crate::infra::media::{
 };
 use crate::infra::sqlite::artists::SqliteArtistRepository;
 use crate::infra::sqlite::artwork::SqliteArtworkRepository;
+use crate::infra::sqlite::auth::SqliteAuthRepository;
 use crate::infra::sqlite::catalog::SqliteCatalogRepository;
 use crate::infra::sqlite::lyrics_cache::SqliteLyricsCacheRepository;
 use crate::infra::sqlite::maintenance::SqliteMaintenanceRepository;
@@ -16,10 +17,11 @@ use crate::infra::sqlite::scan_jobs::SqliteScanJobRepository;
 use crate::infra::sqlite::scan_library::SqliteScanLibraryRepository;
 use crate::infra::sqlite::settings::SqliteSettingsRepository;
 use crate::infra::sqlite::track_duration::SqliteTrackDurationRepository;
-use crate::{AppRepositories, AppServices, AppState};
+use crate::{AppRepositories, AppServices, AppState, TransportSecurity};
 use anyhow::Result;
 use axum::Router;
-use axum::routing::{get, post};
+use axum::middleware::from_fn_with_state;
+use axum::routing::{delete, get, post};
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use std::path::PathBuf;
@@ -27,7 +29,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tower_http::compression::CompressionLayer;
 use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
-use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
@@ -50,6 +51,7 @@ pub(crate) fn state_from_pool(pool: SqlitePool, static_dir: PathBuf) -> AppState
     AppState {
         static_dir: Arc::new(static_dir),
         repositories: AppRepositories {
+            auth: SqliteAuthRepository::new(pool.clone()),
             catalog: SqliteCatalogRepository::new(pool.clone()),
             settings: SqliteSettingsRepository::new(pool.clone()),
             lyrics_cache: SqliteLyricsCacheRepository::new(pool.clone()),
@@ -73,6 +75,7 @@ pub(crate) fn state_from_pool(pool: SqlitePool, static_dir: PathBuf) -> AppState
             artwork_image_processor: ImageArtworkProcessor,
             playback_media: FfmpegPlaybackMedia,
         },
+        transport: TransportSecurity::plaintext(),
     }
 }
 
@@ -91,6 +94,7 @@ pub async fn build_pool(db_path: &str, max_connections: u32) -> Result<SqlitePoo
 
 pub fn router(state: AppState) -> Router {
     let static_dir = (*state.static_dir).clone();
+    let auth_state = state.clone();
     Router::new()
         .route("/", get(handlers::index))
         .route("/liked", get(handlers::index))
@@ -140,9 +144,20 @@ pub fn router(state: AppState) -> Router {
         .route("/api/relations", get(handlers::relations))
         .route("/api/artwork/{id}", get(handlers::artwork))
         .route("/api/lyrics/search", get(handlers::lyrics_search))
+        .route("/api/auth/status", get(handlers::auth_status))
+        .route("/api/auth/login", post(handlers::login))
+        .route("/api/auth/logout", post(handlers::logout))
         .route(
             "/api/settings",
             get(handlers::get_settings).patch(handlers::patch_settings),
+        )
+        .route(
+            "/api/settings/accounts",
+            get(handlers::list_accounts).post(handlers::create_account),
+        )
+        .route(
+            "/api/settings/accounts/{username}",
+            delete(handlers::delete_account).patch(handlers::update_account_password),
         )
         .route("/api/cache/hls/clear", post(handlers::clear_hls_cache))
         .route("/api/scan-jobs", post(handlers::create_scan_job))
@@ -157,7 +172,10 @@ pub fn router(state: AppState) -> Router {
             CompressionLayer::new()
                 .compress_when(DefaultPredicate::new().and(NotForContentType::const_new("audio/"))),
         )
-        .layer(CorsLayer::permissive())
+        .layer(from_fn_with_state(
+            auth_state,
+            crate::http::auth::require_auth,
+        ))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

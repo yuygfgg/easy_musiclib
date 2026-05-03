@@ -401,6 +401,14 @@ impl UpdateAppSettings {
     }
 }
 
+#[derive(Debug, Clone, o2o)]
+#[map_owned(api::AccountSummary)]
+pub struct AccountSummary {
+    pub username: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 #[derive(Debug, Clone)]
 pub struct PlaybackSource {
     pub title: String,

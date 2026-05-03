@@ -1,6 +1,6 @@
 use crate::util::{PAGE_SIZE, pretty_json};
 use easy_musiclib_macros::{spawn_async, spawn_result};
-use easy_musiclib_shared::{ApiError, Id, ListResponse, ScanJobStatus};
+use easy_musiclib_shared::{ApiError, AuthStatusResponse, Id, ListResponse, ScanJobStatus};
 use gloo_net::http::{Request, Response};
 use leptos::prelude::*;
 use serde::Serialize;
@@ -112,6 +112,28 @@ pub(crate) fn spawn_playback_settings_load(
     };
 }
 
+pub(crate) fn spawn_auth_status_load(
+    set_auth_status: WriteSignal<Option<AuthStatusResponse>>,
+    set_status: WriteSignal<String>,
+) {
+    spawn_result! {
+        api_get::<AuthStatusResponse>("/api/auth/status"),
+        Ok(status) => {
+            set_status.set(auth_status_text(&status));
+            set_auth_status.set(Some(status));
+        },
+        Err(err) => {
+            set_status.set(err);
+            set_auth_status.set(Some(AuthStatusResponse {
+                login_required: true,
+                authenticated: false,
+                username: None,
+                secure_transport: false,
+            }));
+        },
+    };
+}
+
 pub(crate) fn start_scan_poll(job_id: Id, set_scan_status: WriteSignal<String>) {
     let Some(window) = web_sys::window() else {
         return;
@@ -183,6 +205,17 @@ where
     decode_response(response).await
 }
 
+pub(crate) async fn api_delete<T>(url: &str) -> Result<T, String>
+where
+    T: DeserializeOwned,
+{
+    let response = Request::delete(url)
+        .send()
+        .await
+        .map_err(|err| err.to_string())?;
+    decode_response(response).await
+}
+
 async fn decode_response<T>(response: Response) -> Result<T, String>
 where
     T: DeserializeOwned,
@@ -212,4 +245,16 @@ pub(crate) fn list_url(kind: &str, params: &[(&str, String)], page: i64) -> Stri
         }
     }
     format!("/api/{kind}?{}", query.join("&"))
+}
+
+fn auth_status_text(status: &AuthStatusResponse) -> String {
+    if status.login_required {
+        status
+            .username
+            .as_ref()
+            .map(|username| format!("Signed in as {username}"))
+            .unwrap_or_else(|| String::from("Login required"))
+    } else {
+        String::from("Ready")
+    }
 }

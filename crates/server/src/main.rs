@@ -1,21 +1,21 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let env = easy_musiclib_server::env::RuntimeEnv::load_default()?;
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("easy_musiclib_server=info,tower_http=info")),
+            env.get("RUST_LOG")
+                .and_then(|value| EnvFilter::try_new(value).ok())
+                .unwrap_or_else(|| EnvFilter::new("easy_musiclib_server=info,tower_http=info")),
         )
         .init();
 
-    let db_path = std::env::var("MUSICLIB_DB").unwrap_or_else(|_| "musiclib.db".to_string());
-    let static_dir = std::env::var("MUSICLIB_STATIC_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("crates/web/dist"));
+    let db_path = env.get_or("MUSICLIB_DB", "musiclib.db");
+    let static_dir = env.path_or("MUSICLIB_STATIC_DIR", "crates/web/dist");
 
     let args = std::env::args().collect::<Vec<_>>();
     if args.get(1).map(String::as_str) == Some("import-json") {
@@ -38,13 +38,34 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let bind = std::env::var("MUSICLIB_BIND").unwrap_or_else(|_| "0.0.0.0:5010".to_string());
+    let bind = env.get_or("MUSICLIB_BIND", "0.0.0.0:5010");
     let addr: SocketAddr = bind.parse()?;
 
-    let state = easy_musiclib_server::app::build_state(&db_path, static_dir).await?;
+    let tls = easy_musiclib_server::transport::TlsServerConfig::from_paths(
+        env.get("MUSICLIB_TLS_CERT").map(PathBuf::from),
+        env.get("MUSICLIB_TLS_KEY").map(PathBuf::from),
+    )?;
+    let mut state = easy_musiclib_server::app::build_state(&db_path, static_dir).await?;
+    if tls.is_some() {
+        state.transport = easy_musiclib_server::TransportSecurity::encrypted(
+            env.get("MUSICLIB_HSTS")
+                .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on")),
+        );
+    }
+    let configured_accounts =
+        easy_musiclib_server::application::auth::account_count(&state.repositories.auth).await?;
+    if configured_accounts > 0 && tls.is_none() {
+        bail!(
+            "accounts are configured, so MUSICLIB_TLS_CERT and MUSICLIB_TLS_KEY are required before serving"
+        );
+    }
     let app = easy_musiclib_server::app::router(state);
     tracing::info!(%addr, db_path, "easy_musiclib rust server listening");
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    if let Some(tls) = tls {
+        axum::serve(tls.listener(listener), app).await?;
+    } else {
+        axum::serve(listener, app).await?;
+    }
     Ok(())
 }
