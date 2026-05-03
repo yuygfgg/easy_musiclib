@@ -1,5 +1,9 @@
 # Easy Musiclib
 
+<p align="center">
+  <img src="crates/web/dist/icons/icon-1024.png" alt="Easy Musiclib icon" width="96" height="96">
+</p>
+
 ## Quick Start
 
 ```bash
