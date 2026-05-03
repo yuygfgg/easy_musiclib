@@ -2,10 +2,12 @@ pub mod app;
 pub mod application;
 pub mod contracts;
 pub mod domain;
+pub mod env;
 pub mod handlers;
 pub mod http;
 pub mod infra;
 pub mod services;
+pub mod transport;
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -19,6 +21,7 @@ use infra::media::{
 };
 use infra::sqlite::artists::SqliteArtistRepository;
 use infra::sqlite::artwork::SqliteArtworkRepository;
+use infra::sqlite::auth::SqliteAuthRepository;
 use infra::sqlite::catalog::SqliteCatalogRepository;
 use infra::sqlite::lyrics_cache::SqliteLyricsCacheRepository;
 use infra::sqlite::maintenance::SqliteMaintenanceRepository;
@@ -36,10 +39,12 @@ pub struct AppState {
     pub static_dir: Arc<PathBuf>,
     pub repositories: AppRepositories,
     pub services: AppServices,
+    pub transport: TransportSecurity,
 }
 
 #[derive(Clone)]
 pub struct AppRepositories {
+    pub auth: SqliteAuthRepository,
     pub catalog: SqliteCatalogRepository,
     pub settings: SqliteSettingsRepository,
     pub lyrics_cache: SqliteLyricsCacheRepository,
@@ -66,6 +71,28 @@ pub struct AppServices {
     pub playback_media: FfmpegPlaybackMedia,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct TransportSecurity {
+    pub encrypted: bool,
+    pub hsts: bool,
+}
+
+impl TransportSecurity {
+    pub fn plaintext() -> Self {
+        Self {
+            encrypted: false,
+            hsts: false,
+        }
+    }
+
+    pub fn encrypted(hsts: bool) -> Self {
+        Self {
+            encrypted: true,
+            hsts,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct AppError {
     status: StatusCode,
@@ -80,9 +107,23 @@ impl AppError {
         }
     }
 
+    pub fn unauthorized(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            message: message.into(),
+        }
+    }
+
     pub fn not_found(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::NOT_FOUND,
+            message: message.into(),
+        }
+    }
+
+    pub fn upgrade_required(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::UPGRADE_REQUIRED,
             message: message.into(),
         }
     }

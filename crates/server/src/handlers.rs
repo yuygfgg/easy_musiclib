@@ -1,4 +1,5 @@
 use crate::application::artists as artists_app;
+use crate::application::auth::{self as auth_app, AuthError};
 use crate::application::catalog::{
     self as catalog_app, CatalogEntityKind, ListAlbumsInput, ListArtistsInput, ListEventsInput,
     ListTracksInput,
@@ -9,6 +10,7 @@ use crate::application::relations as relations_app;
 use crate::application::scan_jobs as scan_jobs_app;
 use crate::application::settings as settings_app;
 use crate::domain::{AlbumId, ArtistId, EntityId, EventId, ScanJobId, ScanJobState, TrackId};
+use crate::http::auth as http_auth;
 use crate::services::{artwork as artwork_service, hls_cache, playback, scan, track_duration};
 use crate::{ApiResult, AppError, AppState};
 use axum::Json;
@@ -511,6 +513,122 @@ pub async fn patch_settings(
             .await?
             .into(),
     ))
+}
+
+pub async fn auth_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<AuthStatusResponse>> {
+    Ok(Json(auth_status_response(&state, &headers).await?))
+}
+
+pub async fn login(
+    State(state): State<AppState>,
+    Json(req): Json<LoginRequest>,
+) -> ApiResult<Response> {
+    ensure_secure_credentials_transport(&state).await?;
+    let session = auth_app::login(&state.repositories.auth, req.username, req.password)
+        .await
+        .map_err(auth_error)?;
+    let mut response = Json(LoginResponse {
+        username: session.username,
+    })
+    .into_response();
+    http_auth::add_set_cookie(
+        &mut response,
+        http_auth::session_set_cookie(&session.token, session.max_age_seconds),
+    );
+    Ok(response)
+}
+
+pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Response> {
+    let token = http_auth::session_cookie(&headers);
+    auth_app::logout(&state.repositories.auth, token.as_deref()).await?;
+    let mut response = Json(auth_status_response(&state, &HeaderMap::new()).await?).into_response();
+    http_auth::add_set_cookie(&mut response, http_auth::session_clear_cookie());
+    Ok(response)
+}
+
+pub async fn list_accounts(State(state): State<AppState>) -> ApiResult<Json<AccountListResponse>> {
+    Ok(Json(AccountListResponse {
+        accounts: auth_app::list_accounts(&state.repositories.auth)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    }))
+}
+
+pub async fn create_account(
+    State(state): State<AppState>,
+    Json(req): Json<CreateAccountRequest>,
+) -> ApiResult<Json<AccountSummary>> {
+    ensure_secure_credentials_transport(&state).await?;
+    Ok(Json(
+        auth_app::create_account(&state.repositories.auth, req.username, req.password)
+            .await
+            .map_err(auth_error)?
+            .into(),
+    ))
+}
+
+pub async fn update_account_password(
+    State(state): State<AppState>,
+    Path(username): Path<String>,
+    Json(req): Json<UpdateAccountPasswordRequest>,
+) -> ApiResult<Json<AccountSummary>> {
+    ensure_secure_credentials_transport(&state).await?;
+    Ok(Json(
+        auth_app::update_account_password(&state.repositories.auth, username, req.password)
+            .await
+            .map_err(auth_error)?
+            .into(),
+    ))
+}
+
+pub async fn delete_account(
+    State(state): State<AppState>,
+    Path(username): Path<String>,
+) -> ApiResult<Json<DeleteAccountResponse>> {
+    Ok(Json(DeleteAccountResponse {
+        deleted: auth_app::delete_account(&state.repositories.auth, username)
+            .await
+            .map_err(auth_error)?,
+    }))
+}
+
+async fn auth_status_response(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> ApiResult<AuthStatusResponse> {
+    let account_count = auth_app::account_count(&state.repositories.auth).await?;
+    let token = http_auth::session_cookie(headers);
+    let username =
+        auth_app::authenticated_username(&state.repositories.auth, token.as_deref()).await?;
+    Ok(AuthStatusResponse {
+        login_required: account_count > 0,
+        authenticated: username.is_some(),
+        username,
+        secure_transport: state.transport.encrypted,
+    })
+}
+
+async fn ensure_secure_credentials_transport(state: &AppState) -> ApiResult<()> {
+    if state.transport.encrypted {
+        return Ok(());
+    }
+    Err(AppError::upgrade_required(
+        "HTTPS is required for account credentials",
+    ))
+}
+
+fn auth_error(error: AuthError) -> AppError {
+    match error {
+        AuthError::InvalidInput(message) => AppError::bad_request(message),
+        AuthError::InvalidCredentials => AppError::unauthorized("invalid username or password"),
+        AuthError::NotFound(message) => AppError::not_found(message),
+        AuthError::Internal(error) => AppError::from(error),
+    }
 }
 
 pub async fn clear_hls_cache() -> ApiResult<Json<HlsCacheClearResponse>> {

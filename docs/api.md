@@ -2,6 +2,20 @@
 
 The API uses JSON unless the route returns media bytes.
 
+If accounts exist, API and media routes require a valid session cookie over
+HTTPS. With zero accounts, the API remains open.
+
+## Auth
+
+```text
+GET  /api/auth/status
+POST /api/auth/login  { "username": "alice", "password": "..." }
+POST /api/auth/logout
+```
+
+`login` sets an `HttpOnly`, `Secure`, `SameSite=Strict` session cookie.
+Credentials are only accepted over HTTPS.
+
 ## Lists and Details
 
 ```text
@@ -79,6 +93,10 @@ GET /api/tracks/{id_or_uuid}/download
 GET   /api/settings
 PATCH /api/settings { "browser_playback": { "format": "opus", "opus_bitrate": 256000, "flac_sample_rate": 48000 } }
 PATCH /api/settings { "browser_playback": { "format": "flac", "opus_bitrate": 256000, "flac_sample_rate": 48000 } }
+GET   /api/settings/accounts
+POST  /api/settings/accounts { "username": "alice", "password": "..." }
+PATCH /api/settings/accounts/{username} { "password": "..." }
+DELETE /api/settings/accounts/{username}
 ```
 
 Response:

@@ -34,6 +34,46 @@ button:disabled {
   display: none !important;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-panel {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 14px;
+  border: 1px solid #dfe5ed;
+  border-radius: 8px;
+  padding: 22px;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(31, 41, 51, .10);
+}
+
+.auth-panel h1 {
+  margin: 0;
+  font-size: 25px;
+  line-height: 1.15;
+}
+
+.auth-panel p {
+  min-height: 20px;
+  margin: 0;
+  color: #667085;
+  font-size: 14px;
+}
+
+.auth-panel button {
+  border: 0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #2f7de1;
+  color: #fff;
+  cursor: pointer;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -112,6 +152,7 @@ button:disabled {
 .settings input,
 .settings select,
 .settings textarea,
+.auth-panel input,
 .pagination input {
   min-width: 0;
   width: 100%;
@@ -569,6 +610,69 @@ button:disabled {
   resize: vertical;
 }
 
+.account-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.settings .secondary-button {
+  background: #e9eef7;
+  color: #255ea8;
+}
+
+.settings .danger-button {
+  background: #f7e7e7;
+  color: #b42318;
+}
+
+.account-empty {
+  margin: 12px 0 0;
+}
+
+.account-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.account-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #dfe5ed;
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: #fff;
+}
+
+.account-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.account-password-editor {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: end;
+  padding-top: 10px;
+  border-top: 1px solid #edf1f6;
+}
+
 pre {
   min-height: 42px;
   overflow: auto;
@@ -949,9 +1053,19 @@ audio {
   }
 
   .field-row,
+  .account-create,
+  .account-password-editor,
   .settings-grid,
   .toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .account-row {
+    grid-template-columns: 1fr;
+  }
+
+  .account-row-actions {
+    justify-content: flex-start;
   }
 
   .player-bar {

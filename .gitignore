@@ -17,6 +17,9 @@
 
 /library_data.json
 
+/.env
+/certs/
+
 # wasm-bindgen browser bundle generated from crates/web
 /crates/web/dist/easy_musiclib_web.js
 /crates/web/dist/easy_musiclib_web_bg.wasm

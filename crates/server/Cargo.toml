@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+argon2.workspace = true
 axum.workspace = true
 base64.workspace = true
 bytes.workspace = true
@@ -15,6 +16,7 @@ easy_musiclib_media = { path = "../media" }
 easy_musiclib_macros = { path = "../macros" }
 easy_musiclib_shared = { path = "../shared" }
 futures.workspace = true
+getrandom.workspace = true
 hex.workspace = true
 html-escape.workspace = true
 http.workspace = true
@@ -29,6 +31,7 @@ serde_json.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
+tokio-rustls.workspace = true
 tokio-util.workspace = true
 tower-http.workspace = true
 tracing.workspace = true

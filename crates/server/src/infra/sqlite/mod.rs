@@ -1,5 +1,6 @@
 pub mod artists;
 pub mod artwork;
+pub mod auth;
 pub mod catalog;
 pub(crate) mod db;
 pub mod import_old;
