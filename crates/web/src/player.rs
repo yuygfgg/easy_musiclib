@@ -14,8 +14,8 @@ use crate::ui::{ArtistInlineLinks, EntityLink};
 use crate::util::{format_time, progress_value};
 use easy_musiclib_macros::{js_get, match_any_view, spawn_async, spawn_result};
 use easy_musiclib_shared::{
-    BrowserPlaybackFormat, BrowserPlaybackSettings, LikePatch, LyricsCandidate, TrackDetail,
-    TrackSummary,
+    BrowserPlaybackFormat, BrowserPlaybackSettings, BrowserRawFallbackFormat, LikePatch,
+    LyricsCandidate, TrackDetail, TrackSummary,
 };
 use leptos::prelude::*;
 use std::rc::Rc;
@@ -42,6 +42,8 @@ pub(crate) fn Player() -> impl IntoView {
     let (duration, set_duration) = signal(0.0_f64);
     let (stream_start_time, set_stream_start_time) = signal(0.0_f64);
     let (hls_playback, set_hls_playback) = signal(false);
+    let (raw_playback, set_raw_playback) = signal(false);
+    let (raw_failed_track, set_raw_failed_track) = signal(None::<i64>);
     let (pending_hls_start, set_pending_hls_start) = signal(None::<PendingHlsStart>);
     let (browser_playback, set_browser_playback) = signal(BrowserPlaybackSettings::default());
     let (playback_mode, set_playback_mode) = signal(String::from("Idle"));
@@ -172,10 +174,54 @@ pub(crate) fn Player() -> impl IntoView {
         let position = clamp_position(position);
         if let Some(audio) = audio_ref.get() {
             let playback = browser_playback.get_untracked();
+            if playback.format == BrowserPlaybackFormat::Raw
+                && raw_failed_track.get_untracked() != Some(track.id)
+            {
+                let url = raw_url(track.id);
+                let same_src = raw_playback.get_untracked() && audio.current_src().ends_with(&url);
+                set_hls_playback.set(false);
+                set_raw_playback.set(true);
+                set_playback_mode.set(String::from("raw"));
+                set_stream_start_time.set(0.0);
+                set_display_position(position);
+                if same_src {
+                    set_pending_hls_start.set(None);
+                    audio.set_current_time(position);
+                } else {
+                    let _ = audio.pause();
+                    audio.set_src(&url);
+                    set_pending_hls_start.set(Some(PendingHlsStart {
+                        url,
+                        position,
+                        autoplay,
+                    }));
+                    audio.load();
+                    audio.set_current_time(position);
+                }
+                if autoplay {
+                    match audio.play() {
+                        Ok(promise) => {
+                            let set_status = ctx.set_status;
+                            let title = track.title.clone();
+                            spawn_async! {
+                                match JsFuture::from(promise).await {
+                                    Ok(_) => set_status.set(format!("Playing {title}")),
+                                    Err(err) => set_status.set(js_error_text(err)),
+                                }
+                            };
+                        }
+                        Err(err) => ctx.set_status.set(js_error_text(err)),
+                    }
+                }
+                return;
+            }
+
+            let playback = raw_fallback_playback(playback);
             if audio_supports_flac_hls(&audio, playback) {
                 let url = hls_url(track.id);
                 let same_src = hls_playback.get_untracked() && audio.current_src().ends_with(&url);
                 set_hls_playback.set(true);
+                set_raw_playback.set(false);
                 set_playback_mode.set(format!("FLAC HLS {}Hz", playback.flac_sample_rate));
                 set_stream_start_time.set(0.0);
                 set_display_position(position);
@@ -213,6 +259,7 @@ pub(crate) fn Player() -> impl IntoView {
 
             set_pending_hls_start.set(None);
             set_hls_playback.set(false);
+            set_raw_playback.set(false);
             set_playback_mode.set(stream_playback_mode(
                 playback,
                 needs_buffered_audio_response(),
@@ -282,6 +329,8 @@ pub(crate) fn Player() -> impl IntoView {
                 ctx.set_status.set(String::from("Track is not playable"));
                 return;
             }
+            set_raw_failed_track.set(None);
+            set_raw_playback.set(false);
             start_track_playback(
                 track,
                 ctx,
@@ -317,7 +366,7 @@ pub(crate) fn Player() -> impl IntoView {
     let update_audio_progress = move || {
         if let Some(audio) = audio_ref.get() {
             let duration_value = track_duration();
-            let current = if hls_playback.get_untracked() {
+            let current = if hls_playback.get_untracked() || raw_playback.get_untracked() {
                 audio.current_time()
             } else if duration_value > 0.0 {
                 (stream_start_time.get_untracked() + audio.current_time()).min(duration_value)
@@ -407,6 +456,7 @@ pub(crate) fn Player() -> impl IntoView {
         }
     };
 
+    let raw_error_start_stream_at = start_stream_at.clone();
     view! {
         <section class="player-bar" aria-label="Player">
             <button class="player-icon player-prev" type="button" aria-label="Previous track" on:click=move |_| play_offset(-1)>"⏮"</button>
@@ -517,6 +567,15 @@ pub(crate) fn Player() -> impl IntoView {
                 update_audio_progress();
             }
             on:error=move |_| {
+                if raw_playback.get_untracked() {
+                    if let Some(track) = ctx.current_track.get_untracked() {
+                        set_raw_failed_track.set(Some(track.id));
+                        let target = current_time.get_untracked();
+                        ctx.set_status.set(String::from("Raw playback unavailable; falling back to transcoded stream"));
+                        raw_error_start_stream_at(target, true);
+                        return;
+                    }
+                }
                 if let Some(audio) = audio_ref.get() {
                     ctx.set_status.set(audio_error_text(&audio));
                 } else {
@@ -659,6 +718,10 @@ fn stream_url(track_id: i64, start_ms: i64) -> String {
     url
 }
 
+fn raw_url(track_id: i64) -> String {
+    format!("/api/tracks/{track_id}/raw")
+}
+
 fn hls_start_needs_seek(current: f64, target: f64) -> bool {
     if !current.is_finite() || !target.is_finite() {
         return false;
@@ -670,6 +733,17 @@ fn hls_start_needs_seek(current: f64, target: f64) -> bool {
 fn stream_playback_mode(playback: BrowserPlaybackSettings, buffered: bool) -> String {
     let transport = if buffered { "buffered" } else { "direct" };
     match playback.format {
+        BrowserPlaybackFormat::Raw => match playback.raw_fallback {
+            BrowserRawFallbackFormat::Opus => {
+                format!(
+                    "{transport} fallback Opus {}k",
+                    playback.opus_bitrate / 1000
+                )
+            }
+            BrowserRawFallbackFormat::Flac => {
+                format!("{transport} fallback FLAC {}Hz", playback.flac_sample_rate)
+            }
+        },
         BrowserPlaybackFormat::Opus => {
             format!("{transport} Opus {}k", playback.opus_bitrate / 1000)
         }
@@ -677,6 +751,16 @@ fn stream_playback_mode(playback: BrowserPlaybackSettings, buffered: bool) -> St
             format!("{transport} FLAC {}Hz", playback.flac_sample_rate)
         }
     }
+}
+
+fn raw_fallback_playback(mut playback: BrowserPlaybackSettings) -> BrowserPlaybackSettings {
+    if playback.format == BrowserPlaybackFormat::Raw {
+        playback.format = match playback.raw_fallback {
+            BrowserRawFallbackFormat::Opus => BrowserPlaybackFormat::Opus,
+            BrowserRawFallbackFormat::Flac => BrowserPlaybackFormat::Flac,
+        };
+    }
+    playback
 }
 
 fn needs_buffered_audio_response() -> bool {

@@ -1,7 +1,7 @@
 use crate::domain::{BrowserPlaybackSettings, PlaybackSource, TrackId};
 use anyhow::Result;
 use futures::future::BoxFuture;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
 use std::os::fd::RawFd;
@@ -54,10 +54,20 @@ pub trait PlaybackMedia: Send + Sync {
 
     fn is_playable_renderer(&self, renderer_id: Option<&str>) -> bool;
 
+    fn is_exact_cue_renderer(&self, renderer_id: Option<&str>) -> bool;
+
+    fn cue_audio_format(&self, renderer_id: &str) -> Option<BrowserAudioFormat>;
+
     fn render_cue_track<'a>(
         &'a self,
         source: &'a PlaybackSource,
     ) -> BoxFuture<'a, Result<RenderedAudio>>;
+
+    fn render_cue_track_to_path<'a>(
+        &'a self,
+        source: &'a PlaybackSource,
+        output_path: &'a Path,
+    ) -> BoxFuture<'a, Result<()>>;
 
     fn transcode_browser_audio(
         &self,

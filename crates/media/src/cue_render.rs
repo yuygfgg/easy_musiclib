@@ -1,6 +1,7 @@
 use crate::render::{CueRenderQuality, RenderTags};
 use crate::{ffmpeg_backend, flac, wav};
 use anyhow::{Result, anyhow};
+use std::fs;
 use std::path::Path;
 
 pub const PASSTHROUGH_RENDERER: &str = "passthrough";
@@ -17,9 +18,16 @@ pub struct RenderedCueTrack {
     pub quality: CueRenderQuality,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CueRenderKind {
+    ExactSlice,
+    Transcoded,
+}
+
 pub trait CueTrackRenderer: Sync + Send {
     fn id(&self) -> &'static str;
     fn priority(&self, format_id: &str) -> Option<i32>;
+    fn kind(&self) -> CueRenderKind;
     fn output_mime(&self) -> &'static str;
     fn output_extension(&self) -> &'static str;
     fn quality(&self) -> CueRenderQuality;
@@ -30,6 +38,18 @@ pub trait CueTrackRenderer: Sync + Send {
         end_sample: Option<i64>,
         tags: &RenderTags,
     ) -> Result<Vec<u8>>;
+    fn render_to_path(
+        &self,
+        path: &Path,
+        start_sample: i64,
+        end_sample: Option<i64>,
+        tags: &RenderTags,
+        output_path: &Path,
+    ) -> Result<()> {
+        let bytes = self.render(path, start_sample, end_sample, tags)?;
+        fs::write(output_path, bytes)?;
+        Ok(())
+    }
 }
 
 pub fn cue_renderers() -> &'static [&'static dyn CueTrackRenderer] {
@@ -61,6 +81,18 @@ pub fn is_playable_renderer(renderer_id: Option<&str>) -> bool {
     }
 }
 
+pub fn is_exact_cue_renderer(renderer_id: Option<&str>) -> bool {
+    renderer_id
+        .and_then(cue_renderer_by_id)
+        .map(|renderer| renderer.kind() == CueRenderKind::ExactSlice)
+        .unwrap_or(false)
+}
+
+pub fn cue_renderer_output(renderer_id: &str) -> Option<(&'static str, &'static str)> {
+    cue_renderer_by_id(renderer_id)
+        .map(|renderer| (renderer.output_mime(), renderer.output_extension()))
+}
+
 pub fn render_cue_track_by_renderer(
     renderer_id: &str,
     path: &Path,
@@ -76,6 +108,19 @@ pub fn render_cue_track_by_renderer(
         extension: renderer.output_extension(),
         quality: renderer.quality(),
     })
+}
+
+pub fn render_cue_track_by_renderer_to_path(
+    renderer_id: &str,
+    path: &Path,
+    start_sample: i64,
+    end_sample: Option<i64>,
+    tags: &RenderTags,
+    output_path: &Path,
+) -> Result<()> {
+    let renderer = cue_renderer_by_id(renderer_id)
+        .ok_or_else(|| anyhow!("unsupported cue renderer: {renderer_id}"))?;
+    renderer.render_to_path(path, start_sample, end_sample, tags, output_path)
 }
 
 static CUE_RENDERERS: [&'static dyn CueTrackRenderer; 3] = [
@@ -102,6 +147,9 @@ mod tests {
         );
         assert_eq!(cue_renderer_id_for_format_id("wav"), WAV_SLICE_RENDERER);
         assert_eq!(cue_renderer_id_for_format_id("mp3"), FFMPEG_CUE_RENDERER);
+        assert!(is_exact_cue_renderer(Some(FLAC_TRACKSPLIT_RENDERER)));
+        assert!(is_exact_cue_renderer(Some(WAV_SLICE_RENDERER)));
+        assert!(!is_exact_cue_renderer(Some(FFMPEG_CUE_RENDERER)));
         assert!(is_playable_renderer(Some(PASSTHROUGH_RENDERER)));
         assert!(is_playable_renderer(Some(FLAC_TRACKSPLIT_RENDERER)));
         assert!(!is_playable_renderer(Some(UNSUPPORTED_CUE_RENDERER)));

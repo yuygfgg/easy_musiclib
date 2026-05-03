@@ -1,4 +1,4 @@
-use crate::cue_render::{CueTrackRenderer, FFMPEG_CUE_RENDERER};
+use crate::cue_render::{CueRenderKind, CueTrackRenderer, FFMPEG_CUE_RENDERER};
 use crate::render::{
     CueRenderQuality, FLAC_HLS_INIT_FILE, FLAC_HLS_PLAYLIST_FILE, FLAC_HLS_SEGMENT_PATTERN,
     FLAC_HLS_SEGMENT_SECONDS, PlaybackTranscodeFormat, RenderTags, TranscodedAudio,
@@ -28,6 +28,10 @@ impl CueTrackRenderer for FfmpegCueRenderer {
 
     fn priority(&self, format_id: &str) -> Option<i32> {
         (!format_id.eq_ignore_ascii_case("cue")).then_some(50)
+    }
+
+    fn kind(&self) -> CueRenderKind {
+        CueRenderKind::Transcoded
     }
 
     fn output_mime(&self) -> &'static str {

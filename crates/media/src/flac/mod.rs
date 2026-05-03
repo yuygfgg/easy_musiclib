@@ -1,6 +1,6 @@
 mod split;
 
-use crate::cue_render::{CueTrackRenderer, FLAC_TRACKSPLIT_RENDERER};
+use crate::cue_render::{CueRenderKind, CueTrackRenderer, FLAC_TRACKSPLIT_RENDERER};
 use crate::formats::{AudioFormat, read_prefix};
 use crate::render::{CueRenderQuality, RenderTags};
 use anyhow::Result;
@@ -40,6 +40,10 @@ impl CueTrackRenderer for CueRenderer {
 
     fn priority(&self, format_id: &str) -> Option<i32> {
         (format_id == "flac").then_some(100)
+    }
+
+    fn kind(&self) -> CueRenderKind {
+        CueRenderKind::ExactSlice
     }
 
     fn output_mime(&self) -> &'static str {

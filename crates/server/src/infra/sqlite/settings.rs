@@ -1,6 +1,7 @@
 use crate::application::settings::SettingsRepository;
 use crate::domain::{
-    AppSettings, BrowserPlaybackFormat, BrowserPlaybackSettings, UpdateAppSettings,
+    AppSettings, BrowserPlaybackFormat, BrowserPlaybackSettings, BrowserRawFallbackFormat,
+    UpdateAppSettings,
 };
 use anyhow::Result;
 use easy_musiclib_shared::{
@@ -91,6 +92,16 @@ fn now_ms() -> i64 {
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 enum StoredBrowserPlaybackFormat {
+    #[serde(rename = "raw")]
+    Raw,
+    #[serde(rename = "opus")]
+    Opus,
+    #[serde(rename = "flac")]
+    Flac,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+enum StoredBrowserRawFallbackFormat {
     #[serde(rename = "opus")]
     Opus,
     #[serde(rename = "flac")]
@@ -101,6 +112,8 @@ enum StoredBrowserPlaybackFormat {
 struct StoredBrowserPlaybackSettings {
     #[serde(default)]
     format: StoredBrowserPlaybackFormat,
+    #[serde(default)]
+    raw_fallback: StoredBrowserRawFallbackFormat,
     #[serde(default = "default_opus_bitrate")]
     opus_bitrate: i64,
     #[serde(default = "default_flac_sample_rate")]
@@ -111,6 +124,7 @@ impl Default for StoredBrowserPlaybackSettings {
     fn default() -> Self {
         Self {
             format: StoredBrowserPlaybackFormat::default(),
+            raw_fallback: StoredBrowserRawFallbackFormat::default(),
             opus_bitrate: DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE,
             flac_sample_rate: DEFAULT_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE,
         }
@@ -131,10 +145,17 @@ impl Default for StoredBrowserPlaybackFormat {
     }
 }
 
+impl Default for StoredBrowserRawFallbackFormat {
+    fn default() -> Self {
+        Self::Opus
+    }
+}
+
 impl From<StoredBrowserPlaybackSettings> for BrowserPlaybackSettings {
     fn from(value: StoredBrowserPlaybackSettings) -> Self {
         Self {
             format: value.format.into(),
+            raw_fallback: value.raw_fallback.into(),
             opus_bitrate: value.opus_bitrate,
             flac_sample_rate: value.flac_sample_rate,
         }
@@ -145,6 +166,7 @@ impl From<BrowserPlaybackSettings> for StoredBrowserPlaybackSettings {
     fn from(value: BrowserPlaybackSettings) -> Self {
         Self {
             format: value.format.into(),
+            raw_fallback: value.raw_fallback.into(),
             opus_bitrate: value.opus_bitrate,
             flac_sample_rate: value.flac_sample_rate,
         }
@@ -154,6 +176,7 @@ impl From<BrowserPlaybackSettings> for StoredBrowserPlaybackSettings {
 impl From<StoredBrowserPlaybackFormat> for BrowserPlaybackFormat {
     fn from(value: StoredBrowserPlaybackFormat) -> Self {
         match value {
+            StoredBrowserPlaybackFormat::Raw => Self::Raw,
             StoredBrowserPlaybackFormat::Opus => Self::Opus,
             StoredBrowserPlaybackFormat::Flac => Self::Flac,
         }
@@ -163,8 +186,27 @@ impl From<StoredBrowserPlaybackFormat> for BrowserPlaybackFormat {
 impl From<BrowserPlaybackFormat> for StoredBrowserPlaybackFormat {
     fn from(value: BrowserPlaybackFormat) -> Self {
         match value {
+            BrowserPlaybackFormat::Raw => Self::Raw,
             BrowserPlaybackFormat::Opus => Self::Opus,
             BrowserPlaybackFormat::Flac => Self::Flac,
+        }
+    }
+}
+
+impl From<StoredBrowserRawFallbackFormat> for BrowserRawFallbackFormat {
+    fn from(value: StoredBrowserRawFallbackFormat) -> Self {
+        match value {
+            StoredBrowserRawFallbackFormat::Opus => Self::Opus,
+            StoredBrowserRawFallbackFormat::Flac => Self::Flac,
+        }
+    }
+}
+
+impl From<BrowserRawFallbackFormat> for StoredBrowserRawFallbackFormat {
+    fn from(value: BrowserRawFallbackFormat) -> Self {
+        match value {
+            BrowserRawFallbackFormat::Opus => Self::Opus,
+            BrowserRawFallbackFormat::Flac => Self::Flac,
         }
     }
 }

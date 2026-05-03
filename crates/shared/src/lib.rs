@@ -169,6 +169,16 @@ pub struct ScanJobStatus {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BrowserPlaybackFormat {
+    #[serde(rename = "raw")]
+    Raw,
+    #[serde(rename = "opus")]
+    Opus,
+    #[serde(rename = "flac")]
+    Flac,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BrowserRawFallbackFormat {
     #[serde(rename = "opus")]
     Opus,
     #[serde(rename = "flac")]
@@ -216,6 +226,12 @@ impl Default for BrowserPlaybackFormat {
     }
 }
 
+impl Default for BrowserRawFallbackFormat {
+    fn default() -> Self {
+        Self::Opus
+    }
+}
+
 fn default_browser_playback_opus_bitrate() -> i64 {
     DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE
 }
@@ -228,6 +244,8 @@ fn default_browser_playback_flac_sample_rate() -> i64 {
 pub struct BrowserPlaybackSettings {
     #[serde(default)]
     pub format: BrowserPlaybackFormat,
+    #[serde(default)]
+    pub raw_fallback: BrowserRawFallbackFormat,
     #[serde(default = "default_browser_playback_opus_bitrate")]
     pub opus_bitrate: i64,
     #[serde(default = "default_browser_playback_flac_sample_rate")]
@@ -238,6 +256,7 @@ impl Default for BrowserPlaybackSettings {
     fn default() -> Self {
         Self {
             format: BrowserPlaybackFormat::default(),
+            raw_fallback: BrowserRawFallbackFormat::default(),
             opus_bitrate: DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE,
             flac_sample_rate: DEFAULT_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE,
         }

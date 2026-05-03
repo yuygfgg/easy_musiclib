@@ -15,10 +15,10 @@ use easy_musiclib_shared::{
     AccountListResponse, AccountSummary, AlbumDetail, AlbumSummary, AliasCsvImportRequest,
     AppSettings, ArtistDetail, ArtistSummary, BROWSER_PLAYBACK_FLAC_SAMPLE_RATE_OPTIONS,
     BROWSER_PLAYBACK_OPUS_BITRATE_OPTIONS, BrowserPlaybackFormat, BrowserPlaybackSettings,
-    CreateAccountRequest, CreateArtistRequest, DeleteAccountResponse, EventDetail, EventSummary,
-    HlsCacheClearResponse, LoginRequest, LoginResponse, MergeArtistsRequest, RelationGraph,
-    ScanJobRequest, ScanJobStatus, TrackSummary, UpdateAccountPasswordRequest,
-    UpdateAppSettingsRequest,
+    BrowserRawFallbackFormat, CreateAccountRequest, CreateArtistRequest, DeleteAccountResponse,
+    EventDetail, EventSummary, HlsCacheClearResponse, LoginRequest, LoginResponse,
+    MergeArtistsRequest, RelationGraph, ScanJobRequest, ScanJobStatus, TrackSummary,
+    UpdateAccountPasswordRequest, UpdateAppSettingsRequest,
 };
 use leptos::prelude::*;
 
@@ -715,6 +715,12 @@ pub(crate) fn SettingsPage() -> impl IntoView {
         save_playback.run(playback);
     };
 
+    let save_raw_fallback = move |format: BrowserRawFallbackFormat| {
+        let mut playback = browser_playback.get_untracked();
+        playback.raw_fallback = format;
+        save_playback.run(playback);
+    };
+
     let save_opus_bitrate = move |value: String| {
         let mut playback = browser_playback.get_untracked();
         playback.opus_bitrate = parse_i64_or(&value, playback.opus_bitrate);
@@ -844,6 +850,15 @@ pub(crate) fn SettingsPage() -> impl IntoView {
                         <input
                             type="radio"
                             name="browser-playback-format"
+                            prop:checked=move || browser_playback.get().format == BrowserPlaybackFormat::Raw
+                            on:change=move |_| save_playback_format(BrowserPlaybackFormat::Raw)
+                        />
+                        "Raw"
+                    </label>
+                    <label class="checkbox-row">
+                        <input
+                            type="radio"
+                            name="browser-playback-format"
                             prop:checked=move || browser_playback.get().format == BrowserPlaybackFormat::Opus
                             on:change=move |_| save_playback_format(BrowserPlaybackFormat::Opus)
                         />
@@ -857,6 +872,26 @@ pub(crate) fn SettingsPage() -> impl IntoView {
                             on:change=move |_| save_playback_format(BrowserPlaybackFormat::Flac)
                         />
                         "FLAC"
+                    </label>
+                </div>
+                <div class="settings-grid">
+                    <label class="checkbox-row">
+                        <input
+                            type="radio"
+                            name="browser-raw-fallback"
+                            prop:checked=move || browser_playback.get().raw_fallback == BrowserRawFallbackFormat::Opus
+                            on:change=move |_| save_raw_fallback(BrowserRawFallbackFormat::Opus)
+                        />
+                        "Raw fallback: Opus"
+                    </label>
+                    <label class="checkbox-row">
+                        <input
+                            type="radio"
+                            name="browser-raw-fallback"
+                            prop:checked=move || browser_playback.get().raw_fallback == BrowserRawFallbackFormat::Flac
+                            on:change=move |_| save_raw_fallback(BrowserRawFallbackFormat::Flac)
+                        />
+                        "Raw fallback: FLAC"
                     </label>
                 </div>
                 <div class="settings-grid">

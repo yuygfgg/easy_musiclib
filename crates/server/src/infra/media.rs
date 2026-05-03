@@ -6,7 +6,9 @@ use crate::application::scan::{
     CueSheetReader, CueTrack, DiscoveredAudioFile, DiscoveredCueFile, DiscoveredLibraryFiles,
     EmbeddedPictureInfo, LibraryFileDiscovery,
 };
-use crate::domain::{BrowserPlaybackFormat, BrowserPlaybackSettings, PlaybackSource};
+use crate::domain::{
+    BrowserPlaybackFormat, BrowserPlaybackSettings, BrowserRawFallbackFormat, PlaybackSource,
+};
 use anyhow::Result;
 use easy_musiclib_media::cue as media_cue;
 use easy_musiclib_media::cue_render;
@@ -119,6 +121,15 @@ impl PlaybackMedia for FfmpegPlaybackMedia {
         cue_render::is_playable_renderer(renderer_id)
     }
 
+    fn is_exact_cue_renderer(&self, renderer_id: Option<&str>) -> bool {
+        cue_render::is_exact_cue_renderer(renderer_id)
+    }
+
+    fn cue_audio_format(&self, renderer_id: &str) -> Option<BrowserAudioFormat> {
+        cue_render::cue_renderer_output(renderer_id)
+            .map(|(mime, extension)| BrowserAudioFormat { mime, extension })
+    }
+
     fn render_cue_track<'a>(
         &'a self,
         source: &'a PlaybackSource,
@@ -150,6 +161,40 @@ impl PlaybackMedia for FfmpegPlaybackMedia {
                 mime: rendered.mime,
                 extension: rendered.extension,
             })
+        }
+        .boxed()
+    }
+
+    fn render_cue_track_to_path<'a>(
+        &'a self,
+        source: &'a PlaybackSource,
+        output_path: &'a std::path::Path,
+    ) -> BoxFuture<'a, Result<()>> {
+        async move {
+            let tags = RenderTags {
+                title: source.title.clone(),
+                artist: source.artist.clone(),
+                album: source.album.clone(),
+                track_no: source.track_no,
+                date: source.date.clone(),
+            };
+            let renderer = source.renderer.clone();
+            let path = std::path::PathBuf::from(source.path.clone());
+            let output_path = output_path.to_path_buf();
+            let start_sample = source.start_sample.unwrap_or(0);
+            let end_sample = source.end_sample;
+            tokio::task::spawn_blocking(move || {
+                cue_render::render_cue_track_by_renderer_to_path(
+                    &renderer,
+                    &path,
+                    start_sample,
+                    end_sample,
+                    &tags,
+                    &output_path,
+                )
+            })
+            .await??;
+            Ok(())
         }
         .boxed()
     }
@@ -222,6 +267,14 @@ impl PlaybackMedia for FfmpegPlaybackMedia {
 fn media_playback_format(playback: BrowserPlaybackSettings) -> PlaybackTranscodeFormat {
     let playback = playback.normalized();
     match playback.format {
+        BrowserPlaybackFormat::Raw => match playback.raw_fallback {
+            BrowserRawFallbackFormat::Opus => PlaybackTranscodeFormat::Opus {
+                bit_rate: playback.opus_bitrate as usize,
+            },
+            BrowserRawFallbackFormat::Flac => PlaybackTranscodeFormat::Flac {
+                sample_rate: playback.flac_sample_rate as u32,
+            },
+        },
         BrowserPlaybackFormat::Opus => PlaybackTranscodeFormat::Opus {
             bit_rate: playback.opus_bitrate as usize,
         },

@@ -659,6 +659,14 @@ pub async fn stream_track(
     .await
 }
 
+pub async fn raw_track(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
+    playback::raw_track_response(state, id, headers).await
+}
+
 pub async fn stream_track_hls_file(
     State(state): State<AppState>,
     Path((id, file)): Path<(String, String)>,

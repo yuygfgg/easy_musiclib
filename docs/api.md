@@ -73,6 +73,7 @@ Set `liked` to `false` to unlike.
 
 ```text
 GET /api/artwork/{artwork_id}?size=256
+GET /api/tracks/{id_or_uuid}/raw
 GET /api/tracks/{id_or_uuid}/stream?start_ms=0
 GET /api/tracks/{id_or_uuid}/stream?start_ms=0&buffered=true
 GET /api/tracks/{id_or_uuid}/hls/playlist.m3u8
@@ -81,7 +82,9 @@ GET /api/tracks/{id_or_uuid}/hls/segment_00000.m4s
 GET /api/tracks/{id_or_uuid}/download
 ```
 
-`stream` returns browser-playback audio in the configured playback format. `start_ms` is optional and defaults to `0`; when present, the stream starts at that millisecond offset relative to the track. For CUE tracks, the offset is relative to the CUE track start and is clamped to the CUE track's duration. Streaming is sequential by default and returns `Accept-Ranges: none`; clients should restart the stream with a new `start_ms` to seek. Add `buffered=true` when the client needs a `Content-Length`/HTTP Range compatible media response, such as Safari or iOS WebView.
+`raw` returns the original playable media entity when the server can expose one with a stable byte length. Ordinary files are served directly with HTTP Range. WAV and FLAC CUE tracks are rendered as lossless single-track cache files and then served with HTTP Range. Other CUE tracks do not expose raw playback.
+
+`stream` returns browser-playback audio in the configured playback format. `start_ms` is optional and defaults to `0`; when present, the stream starts at that millisecond offset relative to the track. For CUE tracks, the offset is relative to the CUE track start and is clamped to the CUE track's duration. Streaming is sequential by default and returns `Accept-Ranges: none`; clients should restart the stream with a new `start_ms` to seek. Add `buffered=true` when the client needs a `Content-Length`/HTTP Range compatible media response, such as Safari or iOS WebView. If browser playback is set to `raw`, `stream` uses `raw_fallback` for transcoded playback.
 
 `hls/{file}` returns generated FLAC fMP4 HLS files for playable tracks at the configured FLAC sample rate. Valid file names are `playlist.m3u8`, `init.mp4`, and segment files matching `segment_00000.m4s`. Requesting the playlist starts HLS generation if the cache is missing; files may briefly return `404` with `HLS file is not ready` while generation is still in progress. The playlist is returned as `application/vnd.apple.mpegurl`; init and segment files are returned as `audio/mp4` and support HTTP Range.
 
@@ -91,8 +94,10 @@ GET /api/tracks/{id_or_uuid}/download
 
 ```text
 GET   /api/settings
-PATCH /api/settings { "browser_playback": { "format": "opus", "opus_bitrate": 256000, "flac_sample_rate": 48000 } }
-PATCH /api/settings { "browser_playback": { "format": "flac", "opus_bitrate": 256000, "flac_sample_rate": 48000 } }
+PATCH /api/settings { "browser_playback": { "format": "raw", "raw_fallback": "opus", "opus_bitrate": 256000, "flac_sample_rate": 48000 } }
+PATCH /api/settings { "browser_playback": { "format": "raw", "raw_fallback": "flac", "opus_bitrate": 256000, "flac_sample_rate": 48000 } }
+PATCH /api/settings { "browser_playback": { "format": "opus", "raw_fallback": "opus", "opus_bitrate": 256000, "flac_sample_rate": 48000 } }
+PATCH /api/settings { "browser_playback": { "format": "flac", "raw_fallback": "opus", "opus_bitrate": 256000, "flac_sample_rate": 48000 } }
 GET   /api/settings/accounts
 POST  /api/settings/accounts { "username": "alice", "password": "..." }
 PATCH /api/settings/accounts/{username} { "password": "..." }
@@ -105,13 +110,14 @@ Response:
 {
   "browser_playback": {
     "format": "opus",
+    "raw_fallback": "opus",
     "opus_bitrate": 256000,
     "flac_sample_rate": 48000
   }
 }
 ```
 
-`browser_playback.format` controls the format used by `/api/tracks/{id_or_uuid}/stream`. Supported values are `opus` and `flac`. `opus_bitrate` is selected from common bitrates in bits per second: `64000`, `96000`, `128000`, `160000`, `192000`, `256000`, `320000`. `flac_sample_rate` is selected from common sample rates in Hz: `44100`, `48000`, `88200`, `96000`, `176400`, `192000`.
+`browser_playback.format` controls the browser player's preferred playback mode. Supported values are `raw`, `opus`, and `flac`. Raw mode tries `/api/tracks/{id_or_uuid}/raw` first and falls back to `raw_fallback` when raw playback is unavailable. `raw_fallback` is either `opus` or `flac`. `opus_bitrate` is selected from common bitrates in bits per second: `64000`, `96000`, `128000`, `160000`, `192000`, `256000`, `320000`. `flac_sample_rate` is selected from common sample rates in Hz: `44100`, `48000`, `88200`, `96000`, `176400`, `192000`.
 
 ## Lyrics
 

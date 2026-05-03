@@ -110,6 +110,7 @@ pub fn router(state: AppState) -> Router {
             get(handlers::get_track).patch(handlers::patch_track),
         )
         .route("/api/tracks/{id}/stream", get(handlers::stream_track))
+        .route("/api/tracks/{id}/raw", get(handlers::raw_track))
         .route(
             "/api/tracks/{id}/hls/{file}",
             get(handlers::stream_track_hls_file),

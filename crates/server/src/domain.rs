@@ -327,6 +327,14 @@ impl ArtworkSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, o2o)]
 #[map_owned(api::BrowserPlaybackFormat)]
 pub enum BrowserPlaybackFormat {
+    Raw,
+    Opus,
+    Flac,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, o2o)]
+#[map_owned(api::BrowserRawFallbackFormat)]
+pub enum BrowserRawFallbackFormat {
     Opus,
     Flac,
 }
@@ -337,11 +345,19 @@ impl Default for BrowserPlaybackFormat {
     }
 }
 
+impl Default for BrowserRawFallbackFormat {
+    fn default() -> Self {
+        Self::Opus
+    }
+}
+
 #[derive(Debug, Clone, Copy, o2o)]
 #[map_owned(api::BrowserPlaybackSettings)]
 pub struct BrowserPlaybackSettings {
     #[map(~.into())]
     pub format: BrowserPlaybackFormat,
+    #[map(~.into())]
+    pub raw_fallback: BrowserRawFallbackFormat,
     pub opus_bitrate: i64,
     pub flac_sample_rate: i64,
 }
@@ -350,6 +366,7 @@ impl Default for BrowserPlaybackSettings {
     fn default() -> Self {
         Self {
             format: BrowserPlaybackFormat::default(),
+            raw_fallback: BrowserRawFallbackFormat::default(),
             opus_bitrate: api::DEFAULT_BROWSER_PLAYBACK_OPUS_BITRATE,
             flac_sample_rate: api::DEFAULT_BROWSER_PLAYBACK_FLAC_SAMPLE_RATE,
         }
