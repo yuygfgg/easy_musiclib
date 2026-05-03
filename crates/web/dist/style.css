@@ -423,27 +423,91 @@ button:disabled {
   color: #243b53;
 }
 
+.graph-shell {
+  position: relative;
+  width: 100%;
+  margin-top: 18px;
+}
+
 .graph {
+  display: block;
   width: 100%;
   height: min(720px, calc(100vh - 210px));
   min-height: 420px;
-  margin-top: 18px;
   border: 1px solid #dfe5ed;
   border-radius: 8px;
   background: #fff;
+  touch-action: none;
+}
+
+.graph-controls {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.graph-controls button {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #cfd8e3;
+  background: rgba(255, 255, 255, .92);
+  color: #1f2933;
+}
+
+.graph-minimap {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  width: 180px;
+  height: 105px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .9);
+}
+
+.minimap-link {
+  stroke: #c3ccd8;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.minimap-node {
+  fill: #2f7de1;
+}
+
+.minimap-viewport {
+  fill: rgba(47, 125, 225, .10);
+  stroke: #2f7de1;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }
 
 .link {
   stroke: #9aa6b8;
   stroke-opacity: .65;
+  vector-effect: non-scaling-stroke;
 }
 
 .node {
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.node circle {
+.node .node-hit,
+.node .node-label-hit {
+  fill: transparent;
+  stroke: transparent;
+  pointer-events: all;
+}
+
+.node .node-dot {
   fill: #2f7de1;
+  pointer-events: none;
 }
 
 .node text {
@@ -452,6 +516,7 @@ button:disabled {
   paint-order: stroke;
   stroke: #fff;
   stroke-width: 3px;
+  pointer-events: none;
 }
 
 .settings-section {
@@ -838,6 +903,24 @@ audio {
   .page {
     width: min(100% - 24px, 1180px);
     padding-top: 18px;
+  }
+
+  .graph-shell {
+    margin-top: 12px;
+  }
+
+  .graph {
+    height: min(68vh, 560px);
+    min-height: 360px;
+  }
+
+  .graph-controls {
+    display: none;
+  }
+
+  .graph-minimap {
+    width: 132px;
+    height: 78px;
   }
 
   .track,
