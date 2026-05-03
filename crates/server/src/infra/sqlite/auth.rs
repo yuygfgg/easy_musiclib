@@ -143,6 +143,7 @@ async fn update_account_password(
     password_hash: &str,
 ) -> Result<Option<AccountSummary>> {
     let now = chrono::Utc::now().timestamp_millis();
+    let mut tx = pool.begin().await?;
     let result = sqlx::query(
         "UPDATE accounts
          SET password_hash = ?, updated_at = ?
@@ -151,9 +152,10 @@ async fn update_account_password(
     .bind(password_hash)
     .bind(now)
     .bind(username_norm)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
     if result.rows_affected() == 0 {
+        tx.commit().await?;
         return Ok(None);
     }
     sqlx::query(
@@ -161,28 +163,28 @@ async fn update_account_password(
          WHERE account_id = (SELECT id FROM accounts WHERE username_norm = ?)",
     )
     .bind(username_norm)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
-    account_summary(pool, username_norm).await
-}
 
-async fn account_summary(pool: &SqlitePool, username_norm: &str) -> Result<Option<AccountSummary>> {
-    let Some(row) = sqlx::query(
+    let summary = if let Some(row) = sqlx::query(
         "SELECT username, created_at, updated_at
          FROM accounts
          WHERE username_norm = ?",
     )
     .bind(username_norm)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await?
-    else {
-        return Ok(None);
+    {
+        Some(AccountSummary {
+            username: row.try_get("username")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
+        })
+    } else {
+        None
     };
-    Ok(Some(AccountSummary {
-        username: row.try_get("username")?,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
-    }))
+    tx.commit().await?;
+    Ok(summary)
 }
 
 async fn delete_account(pool: &SqlitePool, username_norm: &str) -> Result<bool> {
