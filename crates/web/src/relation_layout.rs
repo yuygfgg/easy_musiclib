@@ -6,11 +6,16 @@ pub(crate) const GRAPH_VIEWBOX_HEIGHT: f64 = 700.0;
 
 const GRAPH_CENTER_X: f64 = GRAPH_VIEWBOX_WIDTH / 2.0;
 const GRAPH_CENTER_Y: f64 = GRAPH_VIEWBOX_HEIGHT / 2.0;
-const GRAPH_MIN_X: f64 = 55.0;
-const GRAPH_MAX_X: f64 = GRAPH_VIEWBOX_WIDTH - GRAPH_MIN_X;
-const GRAPH_MIN_Y: f64 = 45.0;
-const GRAPH_MAX_Y: f64 = GRAPH_VIEWBOX_HEIGHT - GRAPH_MIN_Y;
 const GOLDEN_ANGLE: f64 = 2.399_963_229_728_653;
+const SETTLE_FRAME_LIMIT: u32 = 48;
+const SETTLE_STOP_SHIFT: f64 = 0.18;
+const NODE_HIT_RADIUS: f64 = 26.0;
+const NODE_LABEL_HIT_X: f64 = 10.0;
+const NODE_LABEL_CHAR_WIDTH: f64 = 7.2;
+const NODE_LABEL_PADDING: f64 = 24.0;
+const NODE_LABEL_MIN_WIDTH: f64 = 52.0;
+const NODE_LABEL_MAX_WIDTH: f64 = 260.0;
+const NODE_LABEL_TRUNCATION: &str = "...";
 
 #[derive(Clone, Copy)]
 pub(crate) struct LayoutPosition {
@@ -36,6 +41,43 @@ struct SimEdge {
     strength: f64,
 }
 
+#[derive(Clone, Copy)]
+struct NodeExtents {
+    left: f64,
+    right: f64,
+    top: f64,
+    bottom: f64,
+}
+
+impl NodeExtents {
+    fn scaled(self, scale: f64) -> Self {
+        Self {
+            left: self.left * scale,
+            right: self.right * scale,
+            top: self.top * scale,
+            bottom: self.bottom * scale,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct LayoutBounds {
+    pub(crate) min_x: f64,
+    pub(crate) min_y: f64,
+    pub(crate) max_x: f64,
+    pub(crate) max_y: f64,
+}
+
+impl LayoutBounds {
+    pub(crate) fn width(self) -> f64 {
+        (self.max_x - self.min_x).max(1.0)
+    }
+
+    pub(crate) fn height(self) -> f64 {
+        (self.max_y - self.min_y).max(1.0)
+    }
+}
+
 fn initial_position(index: usize) -> (f64, f64) {
     let radius = 14.0 * (index as f64 + 1.0).sqrt();
     let angle = index as f64 * GOLDEN_ANGLE;
@@ -45,11 +87,32 @@ fn initial_position(index: usize) -> (f64, f64) {
     )
 }
 
-pub(crate) fn clamp_graph_position(x: f64, y: f64) -> (f64, f64) {
-    (
-        x.clamp(GRAPH_MIN_X, GRAPH_MAX_X),
-        y.clamp(GRAPH_MIN_Y, GRAPH_MAX_Y),
-    )
+pub(crate) fn relation_node_label_text(name: &str) -> String {
+    let max_text_width = NODE_LABEL_MAX_WIDTH - NODE_LABEL_PADDING;
+    if relation_node_text_width(name) <= max_text_width {
+        return name.to_string();
+    }
+
+    let truncation_width = relation_node_text_width(NODE_LABEL_TRUNCATION);
+    let budget = (max_text_width - truncation_width).max(0.0);
+    let mut text = String::new();
+    let mut width = 0.0;
+    for ch in name.chars() {
+        let ch_width = relation_node_char_width(ch);
+        if width + ch_width > budget {
+            break;
+        }
+        text.push(ch);
+        width += ch_width;
+    }
+    text.push_str(NODE_LABEL_TRUNCATION);
+    text
+}
+
+pub(crate) fn relation_node_label_width(name: &str) -> f64 {
+    let label = relation_node_label_text(name);
+    (relation_node_text_width(&label) + NODE_LABEL_PADDING)
+        .clamp(NODE_LABEL_MIN_WIDTH, NODE_LABEL_MAX_WIDTH)
 }
 
 pub(crate) fn layout_position(positions: &[LayoutPosition], id: Id) -> (f64, f64) {
@@ -58,6 +121,48 @@ pub(crate) fn layout_position(positions: &[LayoutPosition], id: Id) -> (f64, f64
         .find(|position| position.id == id)
         .map(|position| (position.x, position.y))
         .unwrap_or((GRAPH_CENTER_X, GRAPH_CENTER_Y))
+}
+
+pub(crate) fn relation_graph_bounds_with_scale(
+    nodes: &[RelationNode],
+    positions: &[LayoutPosition],
+    padding: f64,
+    node_scale: f64,
+) -> LayoutBounds {
+    let node_scale = node_scale.max(0.001);
+    let Some(first) = nodes.first() else {
+        return LayoutBounds {
+            min_x: GRAPH_CENTER_X - GRAPH_VIEWBOX_WIDTH / 2.0,
+            min_y: GRAPH_CENTER_Y - GRAPH_VIEWBOX_HEIGHT / 2.0,
+            max_x: GRAPH_CENTER_X + GRAPH_VIEWBOX_WIDTH / 2.0,
+            max_y: GRAPH_CENTER_Y + GRAPH_VIEWBOX_HEIGHT / 2.0,
+        };
+    };
+
+    let (first_x, first_y) = layout_position(positions, first.id);
+    let first_extents = relation_node_extents(first).scaled(node_scale);
+    let mut bounds = LayoutBounds {
+        min_x: first_x - first_extents.left,
+        min_y: first_y - first_extents.top,
+        max_x: first_x + first_extents.right,
+        max_y: first_y + first_extents.bottom,
+    };
+
+    for node in nodes.iter().skip(1) {
+        let (x, y) = layout_position(positions, node.id);
+        let extents = relation_node_extents(node).scaled(node_scale);
+        bounds.min_x = bounds.min_x.min(x - extents.left);
+        bounds.min_y = bounds.min_y.min(y - extents.top);
+        bounds.max_x = bounds.max_x.max(x + extents.right);
+        bounds.max_y = bounds.max_y.max(y + extents.bottom);
+    }
+
+    LayoutBounds {
+        min_x: bounds.min_x - padding,
+        min_y: bounds.min_y - padding,
+        max_x: bounds.max_x + padding,
+        max_y: bounds.max_y + padding,
+    }
 }
 
 pub(crate) fn relation_graph_layout(
@@ -88,6 +193,22 @@ pub(crate) fn relation_graph_layout(
     run_force_layout(nodes, edges, positions, None, iterations, 1.0, 0.986, true)
 }
 
+pub(crate) fn relation_graph_layout_settled(
+    nodes: &[RelationNode],
+    edges: &[RelationEdge],
+) -> Vec<LayoutPosition> {
+    let mut positions = relation_graph_layout(nodes, edges);
+    for frame in 0..SETTLE_FRAME_LIMIT {
+        let updated = relation_graph_layout_relax(nodes, edges, &positions, frame);
+        let shift = max_layout_shift(&positions, &updated);
+        positions = updated;
+        if shift <= SETTLE_STOP_SHIFT {
+            break;
+        }
+    }
+    positions
+}
+
 pub(crate) fn relation_graph_layout_tick(
     nodes: &[RelationNode],
     edges: &[RelationEdge],
@@ -100,7 +221,7 @@ pub(crate) fn relation_graph_layout_tick(
     }
     if count == 1 {
         let (x, y) = if nodes[0].id == fixed_position.id {
-            clamp_graph_position(fixed_position.x, fixed_position.y)
+            (fixed_position.x, fixed_position.y)
         } else {
             current_positions
                 .first()
@@ -243,10 +364,10 @@ fn run_force_layout(
         .collect::<Vec<_>>();
 
     let fixed = fixed_position.and_then(|position| {
-        index_by_id.get(&position.id).copied().map(|index| {
-            let (x, y) = clamp_graph_position(position.x, position.y);
-            (index, LayoutPosition { x, y, ..position })
-        })
+        index_by_id
+            .get(&position.id)
+            .copied()
+            .map(|index| (index, position))
     });
     let mut sim_nodes = positions
         .into_iter()
@@ -286,7 +407,6 @@ fn run_force_layout(
         apply_link_force(&mut sim_nodes, &sim_edges, alpha);
         apply_charge_force(&mut sim_nodes, charge, charge_radius2, alpha);
         apply_center_force(&mut sim_nodes, center_strength, alpha);
-        apply_wall_force(&mut sim_nodes, alpha);
         integrate(&mut sim_nodes, fixed, velocity_decay);
         alpha *= alpha_decay;
     }
@@ -301,7 +421,7 @@ fn run_force_layout(
         .collect::<Vec<_>>();
 
     if fit {
-        fit_layout(&mut result);
+        fit_layout(nodes, &mut result);
     }
 
     result
@@ -363,22 +483,6 @@ fn apply_center_force(nodes: &mut [SimNode], strength: f64, alpha: f64) {
     }
 }
 
-fn apply_wall_force(nodes: &mut [SimNode], alpha: f64) {
-    let strength = 0.12 * alpha;
-    for node in nodes {
-        if node.x < GRAPH_MIN_X {
-            node.vx += (GRAPH_MIN_X - node.x) * strength;
-        } else if node.x > GRAPH_MAX_X {
-            node.vx += (GRAPH_MAX_X - node.x) * strength;
-        }
-        if node.y < GRAPH_MIN_Y {
-            node.vy += (GRAPH_MIN_Y - node.y) * strength;
-        } else if node.y > GRAPH_MAX_Y {
-            node.vy += (GRAPH_MAX_Y - node.y) * strength;
-        }
-    }
-}
-
 fn integrate(nodes: &mut [SimNode], fixed: Option<(usize, LayoutPosition)>, velocity_decay: f64) {
     for (index, node) in nodes.iter_mut().enumerate() {
         if let Some((fixed_index, position)) = fixed {
@@ -398,17 +502,22 @@ fn integrate(nodes: &mut [SimNode], fixed: Option<(usize, LayoutPosition)>, velo
     }
 }
 
-fn fit_layout(positions: &mut [LayoutPosition]) {
+fn fit_layout(nodes: &[RelationNode], positions: &mut [LayoutPosition]) {
     let Some(first) = positions.first().copied() else {
         return;
     };
-    let (mut min_x, mut max_x) = (first.x, first.x);
-    let (mut min_y, mut max_y) = (first.y, first.y);
-    for position in positions.iter() {
-        min_x = min_x.min(position.x);
-        max_x = max_x.max(position.x);
-        min_y = min_y.min(position.y);
-        max_y = max_y.max(position.y);
+    let first_extents = nodes
+        .first()
+        .map(relation_node_extents)
+        .unwrap_or_else(|| relation_node_extents_for_label_width(0.0));
+    let (mut min_x, mut max_x) = (first.x - first_extents.left, first.x + first_extents.right);
+    let (mut min_y, mut max_y) = (first.y - first_extents.top, first.y + first_extents.bottom);
+    for (node, position) in nodes.iter().zip(positions.iter()) {
+        let extents = relation_node_extents(node);
+        min_x = min_x.min(position.x - extents.left);
+        max_x = max_x.max(position.x + extents.right);
+        min_y = min_y.min(position.y - extents.top);
+        max_y = max_y.max(position.y + extents.bottom);
     }
 
     let source_width = (max_x - min_x).max(1.0);
@@ -422,9 +531,32 @@ fn fit_layout(positions: &mut [LayoutPosition]) {
     let offset_y = GRAPH_CENTER_Y - ((min_y + max_y) * scale / 2.0);
 
     for position in positions {
-        let (x, y) =
-            clamp_graph_position(position.x * scale + offset_x, position.y * scale + offset_y);
-        position.x = x;
-        position.y = y;
+        position.x = position.x * scale + offset_x;
+        position.y = position.y * scale + offset_y;
+    }
+}
+
+fn relation_node_extents(node: &RelationNode) -> NodeExtents {
+    relation_node_extents_for_label_width(relation_node_label_width(&node.name))
+}
+
+fn relation_node_text_width(text: &str) -> f64 {
+    text.chars().map(relation_node_char_width).sum()
+}
+
+fn relation_node_char_width(ch: char) -> f64 {
+    if ch.is_ascii() {
+        NODE_LABEL_CHAR_WIDTH
+    } else {
+        12.0
+    }
+}
+
+fn relation_node_extents_for_label_width(label_width: f64) -> NodeExtents {
+    NodeExtents {
+        left: NODE_HIT_RADIUS,
+        right: NODE_LABEL_HIT_X + label_width,
+        top: NODE_HIT_RADIUS,
+        bottom: NODE_HIT_RADIUS,
     }
 }

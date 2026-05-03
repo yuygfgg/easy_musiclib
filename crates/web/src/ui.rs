@@ -2,9 +2,10 @@ use crate::api::api_patch_json;
 use crate::app::{AppContext, PlayRequest};
 use crate::hls_prefetch::spawn_hls_page_prefetch;
 use crate::relation_layout::{
-    GRAPH_VIEWBOX_HEIGHT, GRAPH_VIEWBOX_WIDTH, LayoutPosition, clamp_graph_position,
-    layout_position, max_layout_shift, relation_graph_layout, relation_graph_layout_relax,
-    relation_graph_layout_tick,
+    GRAPH_VIEWBOX_HEIGHT, GRAPH_VIEWBOX_WIDTH, LayoutBounds, LayoutPosition, layout_position,
+    max_layout_shift, relation_graph_bounds_with_scale, relation_graph_layout_relax,
+    relation_graph_layout_settled, relation_graph_layout_tick, relation_node_label_text,
+    relation_node_label_width,
 };
 use crate::route::Page;
 use crate::util::{album_counts, album_date, playable_tracks, total_pages};
@@ -20,7 +21,7 @@ use std::{
     cell::{Cell, RefCell},
     rc::Rc,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
 };
@@ -28,6 +29,90 @@ use wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 
 const RELAX_FRAME_LIMIT: u32 = 48;
 const RELAX_STOP_SHIFT: f64 = 0.18;
+const DOUBLE_TAP_MAX_MS: f64 = 560.0;
+const DOUBLE_TAP_MAX_DISTANCE_PX: f64 = 96.0;
+const TAP_MAX_MOVE_PX: f64 = 22.0;
+const GRAPH_FIT_PADDING: f64 = 76.0;
+const MIN_VIEWPORT_WIDTH: f64 = 160.0;
+const ZOOM_IN_FACTOR: f64 = 0.78;
+const ZOOM_OUT_FACTOR: f64 = 1.28;
+
+#[derive(Clone, Copy)]
+struct GraphDragStart {
+    id: Id,
+    pointer_id: i32,
+    client_x: f64,
+    client_y: f64,
+}
+
+#[derive(Clone, Copy)]
+struct GraphTap {
+    id: Id,
+    time_ms: f64,
+    client_x: f64,
+    client_y: f64,
+}
+
+#[derive(Clone, Copy)]
+struct GraphViewport {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+impl GraphViewport {
+    fn view_box(self) -> String {
+        format!("{} {} {} {}", self.x, self.y, self.width, self.height)
+    }
+
+    fn center(self) -> (f64, f64) {
+        (self.x + self.width / 2.0, self.y + self.height / 2.0)
+    }
+
+    fn node_scale(self) -> f64 {
+        (self.width / GRAPH_VIEWBOX_WIDTH).max(0.001)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct GraphPointer {
+    pointer_id: i32,
+    client_x: f64,
+    client_y: f64,
+}
+
+#[derive(Clone, Copy)]
+struct GraphPanStart {
+    pointer_id: i32,
+    client_x: f64,
+    client_y: f64,
+    viewport: GraphViewport,
+}
+
+#[derive(Clone, Copy)]
+struct GraphPinchStart {
+    distance: f64,
+    center_x: f64,
+    center_y: f64,
+    viewport: GraphViewport,
+}
+
+struct GraphGesture {
+    pointers: Vec<GraphPointer>,
+    pan: Option<GraphPanStart>,
+    pinch: Option<GraphPinchStart>,
+}
+
+impl GraphGesture {
+    fn new() -> Self {
+        Self {
+            pointers: Vec::new(),
+            pan: None,
+            pinch: None,
+        }
+    }
+}
 
 #[component]
 pub(crate) fn TrackList(
@@ -384,70 +469,219 @@ pub(crate) fn RelationGraphView(graph: RelationGraph) -> impl IntoView {
     let graph_nodes = graph.nodes.clone();
     let graph_edges = graph.edges.clone();
     let edge_strength_range = edge_strength_range(&graph_edges);
-    let (positions, set_positions) = signal(relation_graph_layout(&graph_nodes, &graph_edges));
+    let initial_positions = relation_graph_layout_settled(&graph_nodes, &graph_edges);
+    let (positions, set_positions) = signal(initial_positions);
+    let (viewport, set_viewport) = signal(fit_graph_viewport_for_positions(
+        &graph_nodes,
+        &positions.get_untracked(),
+    ));
     let (dragging, set_dragging) = signal::<Option<Id>>(None);
     let relax_generation = Arc::new(AtomicU64::new(0));
+    let pointer_drag = Arc::new(Mutex::new(None::<GraphDragStart>));
+    let graph_gesture = Arc::new(Mutex::new(GraphGesture::new()));
+    let last_tap = Arc::new(Mutex::new(None::<GraphTap>));
+    let nodes_for_fit = graph_nodes.clone();
     let nodes_for_drag = graph_nodes.clone();
     let edges_for_drag = graph_edges.clone();
-    let nodes_for_mouseup = graph_nodes.clone();
-    let edges_for_mouseup = graph_edges.clone();
-    let relax_generation_for_mouseup = relax_generation.clone();
-    let nodes_for_mouseleave = graph_nodes.clone();
-    let edges_for_mouseleave = graph_edges.clone();
-    let relax_generation_for_mouseleave = relax_generation.clone();
+    let pointer_drag_for_move = pointer_drag.clone();
+    let graph_gesture_for_move = graph_gesture.clone();
+    let nodes_for_pointerup = graph_nodes.clone();
+    let edges_for_pointerup = graph_edges.clone();
+    let relax_generation_for_pointerup = relax_generation.clone();
+    let pointer_drag_for_pointerup = pointer_drag.clone();
+    let graph_gesture_for_pointerup = graph_gesture.clone();
+    let nodes_for_pointerleave = graph_nodes.clone();
+    let edges_for_pointerleave = graph_edges.clone();
+    let relax_generation_for_pointerleave = relax_generation.clone();
+    let pointer_drag_for_pointerleave = pointer_drag.clone();
+    let graph_gesture_for_pointerleave = graph_gesture.clone();
+    let nodes_for_pointercancel = graph_nodes.clone();
+    let edges_for_pointercancel = graph_edges.clone();
+    let relax_generation_for_pointercancel = relax_generation.clone();
+    let pointer_drag_for_pointercancel = pointer_drag.clone();
+    let graph_gesture_for_pointercancel = graph_gesture.clone();
+    let graph_gesture_for_pointerdown = graph_gesture.clone();
+    let pointer_drag_for_pointerdown = pointer_drag.clone();
+    let graph_edges_for_edges = graph_edges.clone();
+    let graph_nodes_for_nodes = graph_nodes.clone();
+    let graph_edges_for_minimap = graph_edges.clone();
+    let graph_nodes_for_minimap = graph_nodes.clone();
 
     view! {
-        <svg
-            class="graph"
-            viewBox="0 0 1200 700"
-            role="img"
-            aria-label="Artist relation graph"
-            on:mousemove=move |ev| {
-                let Some(node_id) = dragging.get_untracked() else {
-                    return;
-                };
-                ev.prevent_default();
-                let Some((x, y)) = graph_event_position(&ev) else {
-                    return;
-                };
-                set_positions.update(|positions| {
-                    let updated = relation_graph_layout_tick(
-                        &nodes_for_drag,
-                        &edges_for_drag,
-                        positions,
-                        LayoutPosition { id: node_id, x, y },
-                    );
-                    *positions = updated;
-                });
-            }
-            on:mouseup=move |ev| {
-                if dragging.get_untracked().is_some() {
+        <div class="graph-shell">
+            <div class="graph-controls" aria-label="Graph zoom controls">
+                <button
+                    type="button"
+                    title="Zoom in"
+                    on:click=move |_| {
+                        let center = viewport.get_untracked().center();
+                        set_viewport.set(zoom_graph_viewport(
+                            viewport.get_untracked(),
+                            center,
+                            ZOOM_IN_FACTOR,
+                        ));
+                    }
+                >
+                    "+"
+                </button>
+                <button
+                    type="button"
+                    title="Zoom out"
+                    on:click=move |_| {
+                        let center = viewport.get_untracked().center();
+                        set_viewport.set(zoom_graph_viewport(
+                            viewport.get_untracked(),
+                            center,
+                            ZOOM_OUT_FACTOR,
+                        ));
+                    }
+                >
+                    "-"
+                </button>
+                <button
+                    type="button"
+                    title="Fit graph"
+                    on:click=move |_| {
+                        let next_viewport = positions.with_untracked(|positions| {
+                            fit_graph_viewport_for_positions(&nodes_for_fit, positions)
+                        });
+                        set_viewport.set(next_viewport);
+                    }
+                >
+                    "Fit"
+                </button>
+            </div>
+            <svg
+                class="graph"
+                viewBox=move || viewport.get().view_box()
+                role="img"
+                aria-label="Artist relation graph"
+                on:wheel=move |ev| {
                     ev.prevent_default();
-                    set_dragging.set(None);
-                    start_layout_relax(
-                        nodes_for_mouseup.clone(),
-                        edges_for_mouseup.clone(),
-                        set_positions,
-                        dragging,
-                        relax_generation_for_mouseup.clone(),
+                    let factor = if ev.delta_y() < 0.0 { ZOOM_IN_FACTOR } else { ZOOM_OUT_FACTOR };
+                    if let Some(center) = graph_wheel_position(&ev, viewport.get_untracked()) {
+                        set_viewport.set(zoom_graph_viewport(viewport.get_untracked(), center, factor));
+                    }
+                }
+                on:pointerdown=move |ev| {
+                    ev.prevent_default();
+                    capture_pointer(ev.as_ref(), ev.pointer_id());
+                    if ev.pointer_type() == "touch" {
+                        if let Some(drag_start) = get_active_drag(&pointer_drag_for_pointerdown) {
+                            set_active_drag(&pointer_drag_for_pointerdown, None);
+                            set_dragging.set(None);
+                            let current_viewport = viewport.get_untracked();
+                            graph_gesture_pointer_down(
+                                &graph_gesture_for_pointerdown,
+                                drag_start.pointer_id,
+                                drag_start.client_x,
+                                drag_start.client_y,
+                                current_viewport,
+                            );
+                            graph_gesture_pointer_down(
+                                &graph_gesture_for_pointerdown,
+                                ev.pointer_id(),
+                                ev.client_x() as f64,
+                                ev.client_y() as f64,
+                                current_viewport,
+                            );
+                            return;
+                        }
+                    }
+                    graph_gesture_pointer_down(
+                        &graph_gesture_for_pointerdown,
+                        ev.pointer_id(),
+                        ev.client_x() as f64,
+                        ev.client_y() as f64,
+                        viewport.get_untracked(),
                     );
                 }
-            }
-            on:mouseleave=move |_| {
-                if dragging.get_untracked().is_some() {
-                    set_dragging.set(None);
-                    start_layout_relax(
-                        nodes_for_mouseleave.clone(),
-                        edges_for_mouseleave.clone(),
-                        set_positions,
-                        dragging,
-                        relax_generation_for_mouseleave.clone(),
-                    );
+                on:pointermove=move |ev| {
+                    if let Some(drag_start) = active_drag(&pointer_drag_for_move, ev.pointer_id()) {
+                        ev.prevent_default();
+                        let Some((x, y)) = graph_pointer_position(&ev, viewport.get_untracked()) else {
+                            return;
+                        };
+                        set_positions.update(|positions| {
+                            let updated = relation_graph_layout_tick(
+                                &nodes_for_drag,
+                                &edges_for_drag,
+                                positions,
+                                LayoutPosition { id: drag_start.id, x, y },
+                            );
+                            *positions = updated;
+                        });
+                        return;
+                    }
+
+                    if let Some(next_viewport) = graph_gesture_pointer_move(
+                        &graph_gesture_for_move,
+                        ev.as_ref(),
+                        ev.pointer_id(),
+                        ev.client_x() as f64,
+                        ev.client_y() as f64,
+                    ) {
+                        ev.prevent_default();
+                        set_viewport.set(next_viewport);
+                    }
                 }
-            }
-        >
+                on:pointerup=move |ev| {
+                    if active_drag(&pointer_drag_for_pointerup, ev.pointer_id()).is_some() {
+                        finish_graph_drag(
+                            ev.pointer_id(),
+                            &pointer_drag_for_pointerup,
+                            set_dragging,
+                            nodes_for_pointerup.clone(),
+                            edges_for_pointerup.clone(),
+                            set_positions,
+                            dragging,
+                            relax_generation_for_pointerup.clone(),
+                            true,
+                            &ev,
+                        );
+                    } else {
+                        graph_gesture_pointer_up(&graph_gesture_for_pointerup, ev.pointer_id());
+                    }
+                }
+                on:pointerleave=move |ev| {
+                    if active_drag(&pointer_drag_for_pointerleave, ev.pointer_id()).is_some() {
+                        finish_graph_drag(
+                            ev.pointer_id(),
+                            &pointer_drag_for_pointerleave,
+                            set_dragging,
+                            nodes_for_pointerleave.clone(),
+                            edges_for_pointerleave.clone(),
+                            set_positions,
+                            dragging,
+                            relax_generation_for_pointerleave.clone(),
+                            false,
+                            &ev,
+                        );
+                    } else {
+                        graph_gesture_pointer_up(&graph_gesture_for_pointerleave, ev.pointer_id());
+                    }
+                }
+                on:pointercancel=move |ev| {
+                    if active_drag(&pointer_drag_for_pointercancel, ev.pointer_id()).is_some() {
+                        finish_graph_drag(
+                            ev.pointer_id(),
+                            &pointer_drag_for_pointercancel,
+                            set_dragging,
+                            nodes_for_pointercancel.clone(),
+                            edges_for_pointercancel.clone(),
+                            set_positions,
+                            dragging,
+                            relax_generation_for_pointercancel.clone(),
+                            false,
+                            &ev,
+                        );
+                    } else {
+                        graph_gesture_pointer_up(&graph_gesture_for_pointercancel, ev.pointer_id());
+                    }
+                }
+            >
             <For
-                each=move || graph_edges.clone()
+                each=move || graph_edges_for_edges.clone()
                 key=|edge| (edge.source, edge.target)
                 children=move |edge| {
                     let source = edge.source;
@@ -467,13 +701,20 @@ pub(crate) fn RelationGraphView(graph: RelationGraph) -> impl IntoView {
                 }
             />
             <For
-                each=move || { graph_nodes.clone() }
+                each=move || { graph_nodes_for_nodes.clone() }
                 key=|node| node.id
                 children=move |node| {
                     let node_id = node.id;
                     let target = Page::Artist { id: node_id.to_string() };
                     let name = node.name;
+                    let label = relation_node_label_text(&name);
+                    let label_hit_width = relation_node_label_width(&name);
                     let relax_generation_for_node = relax_generation.clone();
+                    let pointer_drag_for_node = pointer_drag.clone();
+                    let pointer_drag_for_node_up = pointer_drag.clone();
+                    let graph_gesture_for_node = graph_gesture.clone();
+                    let last_tap_for_node = last_tap.clone();
+                    let navigate = ctx.navigate;
                     view! {
                         <g
                             class="node"
@@ -488,30 +729,218 @@ pub(crate) fn RelationGraphView(graph: RelationGraph) -> impl IntoView {
                                     "cursor: grab; user-select: none; touch-action: none;"
                                 }
                             }
-                            on:mousedown=move |ev| {
+                            on:pointerdown=move |ev| {
                                 ev.prevent_default();
                                 ev.stop_propagation();
+                                capture_pointer(ev.as_ref(), ev.pointer_id());
+                                if ev.pointer_type() == "touch" {
+                                    if let Some(drag_start) = get_active_drag(&pointer_drag_for_node) {
+                                        if drag_start.pointer_id != ev.pointer_id() {
+                                            set_active_drag(&pointer_drag_for_node, None);
+                                            set_dragging.set(None);
+                                            let current_viewport = viewport.get_untracked();
+                                            graph_gesture_pointer_down(
+                                                &graph_gesture_for_node,
+                                                drag_start.pointer_id,
+                                                drag_start.client_x,
+                                                drag_start.client_y,
+                                                current_viewport,
+                                            );
+                                            graph_gesture_pointer_down(
+                                                &graph_gesture_for_node,
+                                                ev.pointer_id(),
+                                                ev.client_x() as f64,
+                                                ev.client_y() as f64,
+                                                current_viewport,
+                                            );
+                                            return;
+                                        }
+                                    }
+
+                                    if graph_gesture_is_active(&graph_gesture_for_node) {
+                                        graph_gesture_pointer_down(
+                                            &graph_gesture_for_node,
+                                            ev.pointer_id(),
+                                            ev.client_x() as f64,
+                                            ev.client_y() as f64,
+                                            viewport.get_untracked(),
+                                        );
+                                        return;
+                                    }
+                                }
                                 relax_generation_for_node.fetch_add(1, Ordering::Relaxed);
                                 set_dragging.set(Some(node_id));
+                                set_active_drag(&pointer_drag_for_node, Some(GraphDragStart {
+                                    id: node_id,
+                                    pointer_id: ev.pointer_id(),
+                                    client_x: ev.client_x() as f64,
+                                    client_y: ev.client_y() as f64,
+                                }));
                             }
-                            on:dblclick=move |ev| {
+                            on:pointerup=move |ev| {
                                 ev.prevent_default();
-                                ev.stop_propagation();
-                                ctx.navigate.run(target.clone());
+                                let Some(drag_start) =
+                                    active_drag(&pointer_drag_for_node_up, ev.pointer_id())
+                                else {
+                                    return;
+                                };
+                                if drag_start.id != node_id
+                                    || pointer_distance(
+                                        drag_start.client_x,
+                                        drag_start.client_y,
+                                        ev.client_x() as f64,
+                                        ev.client_y() as f64,
+                                    ) > TAP_MAX_MOVE_PX
+                                {
+                                    set_last_tap(&last_tap_for_node, None);
+                                    return;
+                                }
+                                let now = js_sys::Date::now();
+                                let client_x = ev.client_x() as f64;
+                                let client_y = ev.client_y() as f64;
+                                if is_double_tap(
+                                    get_last_tap(&last_tap_for_node),
+                                    node_id,
+                                    now,
+                                    client_x,
+                                    client_y,
+                                ) {
+                                    set_last_tap(&last_tap_for_node, None);
+                                    navigate.run(target.clone());
+                                } else {
+                                    set_last_tap(&last_tap_for_node, Some(GraphTap {
+                                        id: node_id,
+                                        time_ms: now,
+                                        client_x,
+                                        client_y,
+                                    }));
+                                }
                             }
                         >
-                            <circle r="9"></circle>
-                            <text x="14" y="4">{name}</text>
+                            <g transform=move || format!("scale({})", viewport.get().node_scale())>
+                                <title>{name}</title>
+                                <circle class="node-hit" r="26"></circle>
+                                <rect
+                                    class="node-label-hit"
+                                    x="10"
+                                    y="-16"
+                                    width=label_hit_width.to_string()
+                                    height="32"
+                                    rx="6"
+                                ></rect>
+                                <circle class="node-dot" r="9"></circle>
+                                <text x="14" y="4">{label}</text>
+                            </g>
                         </g>
                     }
                 }
             />
-        </svg>
+            </svg>
+            <svg
+                class="graph-minimap"
+                viewBox=move || {
+                    positions.with(|positions| {
+                        layout_bounds_view_box(relation_graph_bounds_with_scale(
+                            &graph_nodes_for_minimap,
+                            positions,
+                            GRAPH_FIT_PADDING,
+                            viewport.get().node_scale(),
+                        ))
+                    })
+                }
+                aria-hidden="true"
+            >
+                <For
+                    each=move || graph_edges_for_minimap.clone()
+                    key=|edge| (edge.source, edge.target)
+                    children=move |edge| {
+                        let source = edge.source;
+                        let target = edge.target;
+                        view! {
+                            <line
+                                class="minimap-link"
+                                x1=move || positions.with(|positions| layout_position(positions, source).0.to_string())
+                                y1=move || positions.with(|positions| layout_position(positions, source).1.to_string())
+                                x2=move || positions.with(|positions| layout_position(positions, target).0.to_string())
+                                y2=move || positions.with(|positions| layout_position(positions, target).1.to_string())
+                            />
+                        }
+                    }
+                />
+                <For
+                    each=move || graph_nodes.clone()
+                    key=|node| node.id
+                    children=move |node| {
+                        let node_id = node.id;
+                        view! {
+                            <circle
+                                class="minimap-node"
+                                cx=move || positions.with(|positions| layout_position(positions, node_id).0.to_string())
+                                cy=move || positions.with(|positions| layout_position(positions, node_id).1.to_string())
+                                r="5"
+                            ></circle>
+                        }
+                    }
+                />
+                <rect
+                    class="minimap-viewport"
+                    x=move || viewport.get().x.to_string()
+                    y=move || viewport.get().y.to_string()
+                    width=move || viewport.get().width.to_string()
+                    height=move || viewport.get().height.to_string()
+                ></rect>
+            </svg>
+        </div>
     }
 }
 
-fn graph_event_position(ev: &leptos::ev::MouseEvent) -> Option<(f64, f64)> {
-    let target = js_get!(ev.as_ref(), "currentTarget").ok()?;
+fn graph_pointer_position(
+    ev: &leptos::ev::PointerEvent,
+    viewport: GraphViewport,
+) -> Option<(f64, f64)> {
+    graph_event_position(
+        ev.as_ref(),
+        ev.client_x() as f64,
+        ev.client_y() as f64,
+        viewport,
+    )
+}
+
+fn graph_wheel_position(
+    ev: &leptos::ev::WheelEvent,
+    viewport: GraphViewport,
+) -> Option<(f64, f64)> {
+    graph_event_position(
+        ev.as_ref(),
+        ev.client_x() as f64,
+        ev.client_y() as f64,
+        viewport,
+    )
+}
+
+fn graph_event_position(
+    event: &JsValue,
+    client_x: f64,
+    client_y: f64,
+    viewport: GraphViewport,
+) -> Option<(f64, f64)> {
+    let metrics = graph_render_metrics(event, viewport)?;
+    Some((
+        viewport.x + (client_x - metrics.left - metrics.offset_x) / metrics.scale,
+        viewport.y + (client_y - metrics.top - metrics.offset_y) / metrics.scale,
+    ))
+}
+
+struct GraphRenderMetrics {
+    left: f64,
+    top: f64,
+    scale: f64,
+    offset_x: f64,
+    offset_y: f64,
+}
+
+fn graph_render_metrics(event: &JsValue, viewport: GraphViewport) -> Option<GraphRenderMetrics> {
+    let target = js_get!(event, "currentTarget").ok()?;
     if target.is_null() || target.is_undefined() {
         return None;
     }
@@ -522,9 +951,292 @@ fn graph_event_position(ev: &leptos::ev::MouseEvent) -> Option<(f64, f64)> {
     let top = js_property_number(&rect, "top")?;
     let width = js_property_number(&rect, "width")?.max(1.0);
     let height = js_property_number(&rect, "height")?.max(1.0);
-    let x = (ev.client_x() as f64 - left) * GRAPH_VIEWBOX_WIDTH / width;
-    let y = (ev.client_y() as f64 - top) * GRAPH_VIEWBOX_HEIGHT / height;
-    Some(clamp_graph_position(x, y))
+    let scale = (width / viewport.width)
+        .min(height / viewport.height)
+        .max(0.001);
+    let rendered_width = viewport.width * scale;
+    let rendered_height = viewport.height * scale;
+    Some(GraphRenderMetrics {
+        left,
+        top,
+        scale,
+        offset_x: (width - rendered_width) / 2.0,
+        offset_y: (height - rendered_height) / 2.0,
+    })
+}
+
+fn fit_graph_viewport(bounds: LayoutBounds) -> GraphViewport {
+    let target_aspect = GRAPH_VIEWBOX_WIDTH / GRAPH_VIEWBOX_HEIGHT;
+    let mut width = bounds.width().max(MIN_VIEWPORT_WIDTH);
+    let mut height = bounds.height().max(MIN_VIEWPORT_WIDTH / target_aspect);
+    let bounds_aspect = width / height;
+    if bounds_aspect > target_aspect {
+        height = width / target_aspect;
+    } else {
+        width = height * target_aspect;
+    }
+
+    GraphViewport {
+        x: (bounds.min_x + bounds.max_x - width) / 2.0,
+        y: (bounds.min_y + bounds.max_y - height) / 2.0,
+        width,
+        height,
+    }
+}
+
+fn fit_graph_viewport_for_positions(
+    nodes: &[RelationNode],
+    positions: &[LayoutPosition],
+) -> GraphViewport {
+    let mut node_scale = 1.0;
+    let mut viewport = fit_graph_viewport(relation_graph_bounds_with_scale(
+        nodes,
+        positions,
+        GRAPH_FIT_PADDING,
+        node_scale,
+    ));
+
+    for _ in 0..4 {
+        node_scale = viewport.node_scale();
+        viewport = fit_graph_viewport(relation_graph_bounds_with_scale(
+            nodes,
+            positions,
+            GRAPH_FIT_PADDING,
+            node_scale,
+        ));
+    }
+
+    viewport
+}
+
+fn zoom_graph_viewport(viewport: GraphViewport, center: (f64, f64), factor: f64) -> GraphViewport {
+    let min_width = MIN_VIEWPORT_WIDTH;
+    let next_width = (viewport.width * factor).max(min_width);
+    let next_height = next_width / (GRAPH_VIEWBOX_WIDTH / GRAPH_VIEWBOX_HEIGHT);
+    let (center_x, center_y) = center;
+    let rx = ((center_x - viewport.x) / viewport.width).clamp(0.0, 1.0);
+    let ry = ((center_y - viewport.y) / viewport.height).clamp(0.0, 1.0);
+    GraphViewport {
+        x: center_x - next_width * rx,
+        y: center_y - next_height * ry,
+        width: next_width,
+        height: next_height,
+    }
+}
+
+fn layout_bounds_view_box(bounds: LayoutBounds) -> String {
+    format!(
+        "{} {} {} {}",
+        bounds.min_x,
+        bounds.min_y,
+        bounds.width(),
+        bounds.height()
+    )
+}
+
+fn graph_gesture_pointer_down(
+    gesture: &Arc<Mutex<GraphGesture>>,
+    pointer_id: i32,
+    client_x: f64,
+    client_y: f64,
+    viewport: GraphViewport,
+) {
+    if let Ok(mut gesture) = gesture.lock() {
+        upsert_graph_pointer(
+            &mut gesture.pointers,
+            GraphPointer {
+                pointer_id,
+                client_x,
+                client_y,
+            },
+        );
+        if gesture.pointers.len() == 1 {
+            gesture.pan = Some(GraphPanStart {
+                pointer_id,
+                client_x,
+                client_y,
+                viewport,
+            });
+            gesture.pinch = None;
+        } else if gesture.pointers.len() >= 2 {
+            gesture.pan = None;
+            gesture.pinch = graph_pinch_start(&gesture.pointers, viewport);
+        }
+    }
+}
+
+fn graph_gesture_pointer_move(
+    gesture: &Arc<Mutex<GraphGesture>>,
+    event: &JsValue,
+    pointer_id: i32,
+    client_x: f64,
+    client_y: f64,
+) -> Option<GraphViewport> {
+    let mut gesture = gesture.lock().ok()?;
+    let pointer = GraphPointer {
+        pointer_id,
+        client_x,
+        client_y,
+    };
+    upsert_graph_pointer(&mut gesture.pointers, pointer);
+
+    if gesture.pointers.len() >= 2 {
+        let pinch = gesture.pinch?;
+        let (a, b) = (gesture.pointers[0], gesture.pointers[1]);
+        let distance = pointer_distance(a.client_x, a.client_y, b.client_x, b.client_y).max(1.0);
+        let factor = (pinch.distance / distance).clamp(0.25, 4.0);
+        let mut next = zoom_graph_viewport(
+            pinch.viewport,
+            graph_event_position(event, pinch.center_x, pinch.center_y, pinch.viewport)?,
+            factor,
+        );
+        next.x -= ((a.client_x + b.client_x) / 2.0 - pinch.center_x)
+            / graph_render_metrics(event, next)?.scale;
+        next.y -= ((a.client_y + b.client_y) / 2.0 - pinch.center_y)
+            / graph_render_metrics(event, next)?.scale;
+        return Some(next);
+    }
+
+    let pan = gesture.pan?;
+    if pan.pointer_id != pointer_id {
+        return None;
+    }
+    let metrics = graph_render_metrics(event, pan.viewport)?;
+    Some(GraphViewport {
+        x: pan.viewport.x - (client_x - pan.client_x) / metrics.scale,
+        y: pan.viewport.y - (client_y - pan.client_y) / metrics.scale,
+        width: pan.viewport.width,
+        height: pan.viewport.height,
+    })
+}
+
+fn graph_gesture_pointer_up(gesture: &Arc<Mutex<GraphGesture>>, pointer_id: i32) {
+    if let Ok(mut gesture) = gesture.lock() {
+        gesture
+            .pointers
+            .retain(|pointer| pointer.pointer_id != pointer_id);
+        gesture.pan = None;
+        gesture.pinch = None;
+    }
+}
+
+fn graph_gesture_is_active(gesture: &Arc<Mutex<GraphGesture>>) -> bool {
+    gesture
+        .lock()
+        .map(|gesture| !gesture.pointers.is_empty())
+        .unwrap_or(false)
+}
+
+fn upsert_graph_pointer(pointers: &mut Vec<GraphPointer>, pointer: GraphPointer) {
+    if let Some(existing) = pointers
+        .iter_mut()
+        .find(|existing| existing.pointer_id == pointer.pointer_id)
+    {
+        *existing = pointer;
+    } else {
+        pointers.push(pointer);
+    }
+}
+
+fn graph_pinch_start(
+    pointers: &[GraphPointer],
+    viewport: GraphViewport,
+) -> Option<GraphPinchStart> {
+    let (a, b) = (*pointers.first()?, *pointers.get(1)?);
+    Some(GraphPinchStart {
+        distance: pointer_distance(a.client_x, a.client_y, b.client_x, b.client_y).max(1.0),
+        center_x: (a.client_x + b.client_x) / 2.0,
+        center_y: (a.client_y + b.client_y) / 2.0,
+        viewport,
+    })
+}
+
+fn active_drag(
+    pointer_drag: &Arc<Mutex<Option<GraphDragStart>>>,
+    pointer_id: i32,
+) -> Option<GraphDragStart> {
+    get_active_drag(pointer_drag).filter(|drag_start| drag_start.pointer_id == pointer_id)
+}
+
+fn get_active_drag(pointer_drag: &Arc<Mutex<Option<GraphDragStart>>>) -> Option<GraphDragStart> {
+    pointer_drag.lock().ok().and_then(|drag_start| *drag_start)
+}
+
+fn set_active_drag(
+    pointer_drag: &Arc<Mutex<Option<GraphDragStart>>>,
+    value: Option<GraphDragStart>,
+) {
+    if let Ok(mut drag_start) = pointer_drag.lock() {
+        *drag_start = value;
+    }
+}
+
+fn get_last_tap(last_tap: &Arc<Mutex<Option<GraphTap>>>) -> Option<GraphTap> {
+    last_tap.lock().ok().and_then(|tap| *tap)
+}
+
+fn set_last_tap(last_tap: &Arc<Mutex<Option<GraphTap>>>, value: Option<GraphTap>) {
+    if let Ok(mut tap) = last_tap.lock() {
+        *tap = value;
+    }
+}
+
+fn finish_graph_drag(
+    pointer_id: i32,
+    pointer_drag: &Arc<Mutex<Option<GraphDragStart>>>,
+    set_dragging: WriteSignal<Option<Id>>,
+    nodes: Vec<RelationNode>,
+    edges: Vec<RelationEdge>,
+    set_positions: WriteSignal<Vec<LayoutPosition>>,
+    dragging: ReadSignal<Option<Id>>,
+    generation: Arc<AtomicU64>,
+    prevent_default: bool,
+    ev: &leptos::ev::PointerEvent,
+) {
+    if active_drag(pointer_drag, pointer_id).is_none() {
+        return;
+    }
+    if prevent_default {
+        ev.prevent_default();
+    }
+    set_active_drag(pointer_drag, None);
+    set_dragging.set(None);
+    start_layout_relax(nodes, edges, set_positions, dragging, generation);
+}
+
+fn capture_pointer(event: &JsValue, pointer_id: i32) {
+    let Ok(target) = js_get!(event, "currentTarget") else {
+        return;
+    };
+    if target.is_null() || target.is_undefined() {
+        return;
+    }
+    let Ok(set_pointer_capture) = js_function!(&target, "setPointerCapture") else {
+        return;
+    };
+    let _ = set_pointer_capture.call1(&target, &JsValue::from_f64(pointer_id as f64));
+}
+
+fn is_double_tap(
+    previous: Option<GraphTap>,
+    id: Id,
+    time_ms: f64,
+    client_x: f64,
+    client_y: f64,
+) -> bool {
+    let Some(previous) = previous else {
+        return false;
+    };
+    previous.id == id
+        && time_ms - previous.time_ms <= DOUBLE_TAP_MAX_MS
+        && pointer_distance(previous.client_x, previous.client_y, client_x, client_y)
+            <= DOUBLE_TAP_MAX_DISTANCE_PX
+}
+
+fn pointer_distance(ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
+    let dx = ax - bx;
+    let dy = ay - by;
+    (dx * dx + dy * dy).sqrt()
 }
 
 fn edge_strength_range(edges: &[RelationEdge]) -> (f64, f64) {
